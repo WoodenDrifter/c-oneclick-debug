@@ -2,9 +2,17 @@
   "name": "c-oneclick-debug",
   "displayName": "C 一键调试",
   "description": "为 C 文件一键生成 tasks.json / launch.json，支持自动断点调试与直接运行，开箱即用。",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "woodendrifter",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WoodenDrifter/c-oneclick-debug.git"
+  },
+  "bugs": {
+    "url": "https://github.com/WoodenDrifter/c-oneclick-debug/issues"
+  },
+  "homepage": "https://github.com/WoodenDrifter/c-oneclick-debug#readme",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -35,9 +43,17 @@
     "onCommand:cDebug.generateTasks",
     "onCommand:cDebug.generateLaunch",
     "onCommand:cDebug.buildOnly",
-    "onCommand:cDebug.breakAtMain"
+    "onCommand:cDebug.breakAtMain",
+    "onCommand:cDebug.panel"
   ],
   "contributes": {
+    "submenus": [
+      {
+        "id": "cDebug.configSubmenu",
+        "label": "C 调试配置",
+        "icon": "$(gear)"
+      }
+    ],
     "commands": [
       {
         "command": "cDebug.run",
@@ -80,6 +96,12 @@
         "title": "在 main 函数处设置断点",
         "category": "C",
         "icon": "$(circle-filled)"
+      },
+      {
+        "command": "cDebug.panel",
+        "title": "打开 C 调试面板（运行 / 调试 / 配置）",
+        "category": "C",
+        "icon": "$(gear)"
       }
     ],
     "menus": {
@@ -95,9 +117,58 @@
           "group": "navigation@2"
         },
         {
-          "command": "cDebug.generateAll",
+          "submenu": "cDebug.configSubmenu",
           "when": "editorLangId == c",
           "group": "navigation@3"
+        }
+      ],
+      "cDebug.configSubmenu": [
+        {
+          "command": "cDebug.generateAll",
+          "group": "1_generate@1"
+        },
+        {
+          "command": "cDebug.generateTasks",
+          "group": "1_generate@2"
+        },
+        {
+          "command": "cDebug.generateLaunch",
+          "group": "1_generate@3"
+        },
+        {
+          "command": "cDebug.buildOnly",
+          "group": "2_build@1"
+        },
+        {
+          "command": "cDebug.breakAtMain",
+          "group": "2_build@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "cDebug.run",
+          "when": "editorLangId == c",
+          "group": "cDebug@1"
+        },
+        {
+          "command": "cDebug.debug",
+          "when": "editorLangId == c",
+          "group": "cDebug@2"
+        },
+        {
+          "command": "cDebug.generateAll",
+          "when": "editorLangId == c",
+          "group": "cDebug@10"
+        },
+        {
+          "command": "cDebug.generateTasks",
+          "when": "editorLangId == c",
+          "group": "cDebug@11"
+        },
+        {
+          "command": "cDebug.generateLaunch",
+          "when": "editorLangId == c",
+          "group": "cDebug@12"
         }
       ],
       "editor/title/run": [
@@ -191,6 +262,10 @@
         },
         {
           "command": "cDebug.breakAtMain",
+          "when": "editorLangId == c"
+        },
+        {
+          "command": "cDebug.panel",
           "when": "editorLangId == c"
         }
       ]

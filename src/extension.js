@@ -431,6 +431,82 @@ async function commandBreakAtMain(arg) {
 }
 
 /**
+ * 快捷面板条目。状态栏按钮和命令面板都走这里，避免两处维护。
+ */
+const PANEL_ITEMS = [
+  {
+    label: '$(gear) 一键生成 tasks.json + launch.json',
+    description: '建立调试环境（已存在会先询问覆盖策略）',
+    command: 'cDebug.generateAll'
+  },
+  {
+    label: '$(checklist) 只生成 tasks.json',
+    description: '仅写入编译任务',
+    command: 'cDebug.generateTasks'
+  },
+  {
+    label: '$(bug) 只生成 launch.json',
+    description: '仅写入调试配置',
+    command: 'cDebug.generateLaunch'
+  },
+  {
+    label: '$(play) 编译并运行（跑到结束）',
+    description: '不进调试器，终端直接执行',
+    command: 'cDebug.run'
+  },
+  {
+    label: '$(debug-alt) 编译并自动断点调试',
+    description: '启动后停在 main 第一条语句',
+    command: 'cDebug.debug'
+  },
+  {
+    label: '$(tools) 只编译，不运行',
+    description: '检查语法与链接错误',
+    command: 'cDebug.buildOnly'
+  },
+  {
+    label: '$(circle-filled) 在 main 处设置断点',
+    description: '只下断点，不启动',
+    command: 'cDebug.breakAtMain'
+  }
+];
+
+/**
+ * 状态栏常驻按钮：只有当前编辑器是 .c 文件时才出现。
+ * @param {vscode.ExtensionContext} context
+ */
+function registerStatusBar(context) {
+  if (typeof vscode.window.createStatusBarItem !== 'function') return;
+  const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  item.text = '$(gear) C 配置';
+  item.tooltip = 'C 一键调试：生成 tasks.json / launch.json、运行、调试';
+  item.command = 'cDebug.panel';
+
+  const refresh = () => {
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document.languageId === 'c') item.show();
+    else item.hide();
+  };
+  refresh();
+
+  context.subscriptions.push(item, vscode.window.onDidChangeActiveTextEditor(refresh));
+}
+
+/**
+ * 命令：快捷面板（状态栏按钮入口）。
+ * @param {any} [arg]
+ */
+async function commandPanel(arg) {
+  const picked = await vscode.window.showQuickPick(PANEL_ITEMS, {
+    title: 'C 一键调试',
+    placeHolder: '选择要执行的操作'
+  });
+  if (picked && picked.command) {
+    await vscode.commands.executeCommand(picked.command, arg);
+  }
+}
+
+/**
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
@@ -456,8 +532,11 @@ function activate(context) {
     vscode.commands.registerCommand('cDebug.generateTasks', (arg) => commandGenerate('tasks', arg)),
     vscode.commands.registerCommand('cDebug.generateLaunch', (arg) => commandGenerate('launch', arg)),
     vscode.commands.registerCommand('cDebug.buildOnly', commandBuildOnly),
-    vscode.commands.registerCommand('cDebug.breakAtMain', commandBreakAtMain)
+    vscode.commands.registerCommand('cDebug.breakAtMain', commandBreakAtMain),
+    vscode.commands.registerCommand('cDebug.panel', commandPanel)
   );
+
+  registerStatusBar(context);
 
   context.subscriptions.push(
     vscode.window.onDidCloseTerminal((terminal) => {

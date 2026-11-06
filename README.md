@@ -1,325 +1,153 @@
 # C 一键调试
 
-给 VS Code 加上"C 语言开箱即用"的体验：**一键生成 `tasks.json` / `launch.json`，点一下就能要么停在 `main` 单步调试，要么直接跑完看结果。**
-
-不用再手写 `${fileDirname}`、不用记 `miDebuggerPath`、也不用每次手动点行号打第一个断点。
+给 VS Code 里的 C 语言开发补上「开箱即用」的那一层：不用手写 `tasks.json` 和 `launch.json`，点一下就能编译运行，再点一下就能停在 `main` 里单步调试。
 
 ## 功能
 
-| 能力 | 说明 |
+- **一键生成配置**：`tasks.json` 与 `launch.json` 自动写好，编译器 / 调试器路径自动探测（gcc、clang、MinGW-w64、MSYS2）
+- **自动断点调试**：启动时自动解析当前文件的 `main`，在函数体内第一条可执行语句下断点，程序直接停在那里
+- **直接跑到结束**：不想调试时，在终端里编译并执行，输出、`scanf` 输入都正常
+- **两种编译范围**：只编译当前文件（单文件练习），或编译目录下全部 `.c` 并链接（多文件项目）
+- **可分别生成**：`tasks.json` 与 `launch.json` 可以单独生成，也可以一次生成两份
+- **不破坏已有配置**：文件已存在时先弹窗询问，选「更新」只改自己那一条，你手写的任务和调试配置原样保留
+
+## 环境要求
+
+| 依赖 | 说明 |
 | --- | --- |
-| 自动断点调试 | 解析源码定位 `main`，下好断点再启动 gdb，程序一启动就停在该看的地方 |
-| 直接运行 | 编译后在集成终端里跑完，不停断点，适合刷题、看输出 |
-| 一键生成配置 | 自动探测 `gcc` / `gdb`，生成 `.vscode/tasks.json` 与 `launch.json` |
-| 分别生成 | 也可以只生成 `tasks.json` 或只生成 `launch.json` |
-| 覆盖前询问 | 目标文件已存在时先弹窗确认，可选「覆盖」「更新（保留其他配置）」「取消」 |
-| 单文件 / 多文件 | `currentFile` 只编译当前文件；`folder` 编译工作区全部 `.c` 再链接 |
-| 智能探测 | 依次查设置项、`PATH`、常见 MinGW / MSYS2 / TDM-GCC 目录；gdb 优先取与 gcc 同目录 |
+| VS Code | 1.80 或更高 |
+| C/C++ 扩展 | `ms-vscode.cpptools`，调试（cppdbg）依赖它 |
+| C 编译器 | `gcc`（推荐 MinGW-w64）或 `clang` |
+| 调试器 | `gdb`，MinGW-w64 自带；只运行不调试的话可以不装 |
+
+编译器不在 PATH 里也没关系，扩展会去常见安装位置找；还找不到就在设置里填绝对路径。
 
 ## 安装
 
-### 方式一：VSIX（推荐）
+三种方式任选其一，装完执行 `Ctrl+Shift+P` → `Developer: Reload Window` 生效。
+
+### 方式一：装打包好的 vsix（最省事）
+
+在仓库的 Release 页面下载 `c-oneclick-debug-x.y.z.vsix`，然后：
 
 ```bash
-code --install-extension c-oneclick-debug-0.2.0.vsix
+code --install-extension c-oneclick-debug-0.3.0.vsix
 ```
 
-或在 VS Code 里 `Ctrl+Shift+P` → `Extensions: Install from VSIX...`。
+也可以打开 VS Code，在扩展面板右上角点 `...` → `从 VSIX 安装`，选中下载的文件。
 
-### 方式二：直接拷贝目录
+### 方式二：克隆源码自己打包
 
-把整个 `c-oneclick-debug` 文件夹复制到扩展目录，然后重启 VS Code（或 `Developer: Reload Window`）：
-
-- Windows: `%USERPROFILE%\.vscode\extensions\`
-- macOS / Linux: `~/.vscode/extensions/`
-
-### 方式三：从源码打包
+需要 Node.js 18 以上。
 
 ```bash
-git clone <你的仓库地址>
+git clone https://github.com/WoodenDrifter/c-oneclick-debug.git
 cd c-oneclick-debug
 npx --yes @vscode/vsce package --no-dependencies
-code --install-extension c-oneclick-debug-0.2.0.vsix
+code --install-extension c-oneclick-debug-0.3.0.vsix
 ```
 
-> 依赖 [Microsoft C/C++ 扩展](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)（调试基于 `cppdbg`），已声明为 `extensionDependencies`，正常会自动安装。
+### 方式三：直接放源码目录（免打包）
+
+扩展是纯 JavaScript，没有编译步骤，把文件夹拷进去就能用：
+
+```bash
+# Windows
+xcopy /E /I c-oneclick-debug "%USERPROFILE%\.vscode\extensions\woodendrifter.c-oneclick-debug-0.3.0"
+```
+
+```bash
+# macOS / Linux
+cp -r c-oneclick-debug ~/.vscode/extensions/woodendrifter.c-oneclick-debug-0.3.0
+```
+
+重启 VS Code 即可。这种方式不会出现在扩展列表里，但功能完全可用；改完代码 Reload Window 就生效。
+
+### 卸载
+
+```bash
+code --uninstall-extension woodendrifter.c-oneclick-debug
+```
+
+方式三装的直接删目录。
 
 ## 使用
 
-打开任意 `.c` 文件，**编辑器右上角会出现三个按钮**（不占用任何快捷键，避免和其他插件抢键位）：
+打开任意 `.c` 文件后，有四个入口，做的事完全一样：
 
-| 按钮 | 图标 | 作用 |
+| 入口 | 位置 |
+| --- | --- |
+| **状态栏按钮** | 右下角 `⚙ C 配置`，只在 `.c` 文件激活时出现，点开是完整菜单 |
+| **编辑器标题栏** | ▶ 运行 · ▷ 调试 · ⚙ 配置（齿轮是下拉菜单，装不下时可能收进 `...`） |
+| **右键菜单** | 编辑器内右键，或资源管理器里右键 `.c` 文件 |
+| **命令面板** | `Ctrl+Shift+P` 输入 `C:` |
+
+### 常用流程
+
+**写作业 / 刷题**：打开 `main.c` → 状态栏 `⚙ C 配置` → `一键生成 tasks.json + launch.json` → 以后直接点 ▶ 运行。
+
+**想看变量**：点 ▷ 调试，程序停在 `main` 里，左边变量面板就有值了。想让它别每次都停，把 `cDebug.autoBreakpoint` 关掉，改用 F9 自己下断点。
+
+### 生成配置时的三种选择
+
+`tasks.json` 或 `launch.json` 已经存在时会弹窗：
+
+| 选项 | 效果 |
+| --- | --- |
+| **更新（推荐）** | 只更新或追加本扩展生成的那一条，你其他的任务、调试配置全部保留 |
+| **覆盖** | 丢弃文件原有内容，只保留本扩展生成的配置 |
+| **取消** | 一个字节都不改 |
+
+文件不存在时不弹窗，直接写入。
+
+### 多文件项目
+
+默认只编译当前文件。要编译整个目录：设置里把 `cDebug.buildMode` 改成 `folder`，产物输出到工作区根目录。目录里有多个 `main` 时扩展会提醒你，因为一起链接会因重复定义失败。
+
+## 设置
+
+| 设置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| 运行 | ▶ | 编译后直接在终端跑到结束 |
-| 调试 | ▷ | 编译并**自动在 `main` 处断点**，停住后单步 |
-| 配置 | ⚙ | 一键生成 `tasks.json` + `launch.json` |
-
-点右上角运行按钮旁的下拉箭头（或右键 `.c` 文件）还能看到更细的命令：
-
-- `只生成 tasks.json`
-- `只生成 launch.json`
-- `只编译，不运行`
-- `在 main 函数处设置断点`
-
-命令面板（`Ctrl+Shift+P`）搜 `C:` 同样可以调用全部命令。
-
-### 覆盖确认
-
-生成配置时，如果目标文件已存在，会弹窗问你：
-
-```
-tasks.json、launch.json 已存在，是否覆盖？
-  [ 更新（推荐） ]  [ 覆盖 ]  [ 取消 ]
-```
-
-- **更新**：只更新/追加本扩展生成的那一条，你自己写的任务和调试配置原样保留
-- **覆盖**：丢弃文件原有内容，只保留扩展生成的配置
-- **取消**（或按 Esc）：不动文件
-
-文件本来就不存在时不会弹窗，直接写。
-
-### 两种模式的区别
-
-| | 运行 ▶ | 调试 ▷ |
-| --- | --- | --- |
-| 是否进调试器 | 否，直接在终端跑 | 是，gdb 接管 |
-| 断点 | 不生效（也不会添加） | 自动在 `main` 打断点 |
-| 输入 `scanf` | 天然可用 | 建议开 `cDebug.externalConsole` |
-| 适合 | 快速看结果 | 单步、看变量、找 bug |
-
-## 生成的文件
-
-`.vscode/tasks.json`：
-
-```json
-{
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "type": "process",
-            "label": "C: 编译当前文件",
-            "command": "D:/Program Files/mingw64/bin/gcc.exe",
-            "args": ["-g", "-O0", "-Wall", "-Wextra", "${file}", "-o", "${fileDirname}/hello.exe"],
-            "options": { "cwd": "${fileDirname}" },
-            "problemMatcher": ["$gcc"],
-            "group": { "kind": "build", "isDefault": true }
-        }
-    ]
-}
-```
-
-`.vscode/launch.json`：
-
-```json
-{
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "C: 自动断点调试",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${fileDirname}/hello.exe",
-            "args": [],
-            "stopAtEntry": false,
-            "cwd": "${fileDirname}",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "miDebuggerPath": "D:/Program Files/mingw64/bin/gdb.exe",
-            "setupCommands": [
-                { "description": "为 gdb 启用整齐打印", "text": "-enable-pretty-printing", "ignoreFailures": true }
-            ],
-            "preLaunchTask": "C: 编译当前文件"
-        }
-    ]
-}
-```
-
-## 设置项
-
-| 设置 | 默认 | 说明 |
-| --- | --- | --- |
-| `cDebug.buildMode` | `currentFile` | 编译范围：当前文件 / 工作区全部 `.c` |
+| `cDebug.buildMode` | `currentFile` | `currentFile` 编译当前文件；`folder` 编译工作区全部 `.c` |
 | `cDebug.compilerPath` | 空 | 编译器绝对路径，留空自动探测 |
-| `cDebug.debuggerPath` | 空 | gdb 绝对路径，留空自动探测 |
-| `cDebug.compilerArgs` | `-g -O0 -Wall -Wextra` | 编译参数（`-g -O0` 保证可调试） |
-| `cDebug.programArgs` | `[]` | 程序运行参数 |
-| `cDebug.externalConsole` | `false` | 调试时用外部控制台（需要 `scanf` 时建议开） |
+| `cDebug.debuggerPath` | 空 | gdb 绝对路径，留空自动探测（优先同目录的 gdb） |
+| `cDebug.compilerArgs` | `-g -O0 -Wall -Wextra` | 编译参数 |
+| `cDebug.programArgs` | `[]` | 程序运行参数，运行和调试都会带上 |
+| `cDebug.externalConsole` | `false` | 调试时用外部控制台窗口，调试中要输入时打开 |
 | `cDebug.buildBeforeDebug` | `true` | 调试前自动编译 |
-| `cDebug.autoBreakpoint` | `true` | 调试时自动在 `main` 下断点 |
-| `cDebug.breakpointMode` | `keep` | `keep` 保留断点；`once` 停在 main 后自动移除 |
-| `cDebug.autoBreakpointScope` | `managed` | `managed` 只管扩展生成的配置；`all` 接管所有 `cppdbg` |
-| `cDebug.autoGenerateConfig` | `true` | 缺少配置时自动生成 |
-| `cDebug.syncConfigOnDebug` | `true` | 运行/调试时按设置刷新生成的那一条；手改党可关 |
+| `cDebug.autoBreakpoint` | `true` | 启动调试时自动在 `main` 处下断点 |
+| `cDebug.breakpointMode` | `keep` | `once` 表示停在 main 后自动移除该断点 |
+| `cDebug.autoBreakpointScope` | `managed` | `all` 表示对你自己的 cppdbg 配置也自动下断点 |
+| `cDebug.autoGenerateConfig` | `true` | 缺配置文件时自动生成 |
+| `cDebug.syncConfigOnDebug` | `true` | 每次运行 / 调试按当前设置刷新配置；习惯手改这两个文件的可以关掉 |
 
 ## 常见问题
 
-**找不到编译器** — 装 [MinGW-w64](https://www.mingw-w64.org/downloads/) 并把 `bin` 加进 `PATH`，或在设置里填 `cDebug.compilerPath`。
+**右下角没有 `⚙ C 配置`**
+按钮只在当前编辑器语言是 C 时出现。如果打开的是 `.h`、`.cpp`，或者焦点在终端 / 输出面板上，它会自动隐藏。
 
-**能编译、能运行，但调试起不来** — 检查 `cDebug.debuggerPath` 是否指向有效的 `gdb.exe`；MinGW 的 gdb 一般和 gcc 同目录。
+**调试提示找不到 gdb**
+MinGW-w64 的部分精简发行版不带 gdb。在终端执行 `gdb --version` 确认，没有就装完整版，或在 `cDebug.debuggerPath` 里填绝对路径。
 
-**断点是灰色圈 / 不停** — 通常没带 `-g` 编译。默认参数已含 `-g -O0`，改 `cDebug.compilerArgs` 时别把它们删了。
+**`scanf` 收不到输入**
+调试模式下把 `cDebug.externalConsole` 打开；直接用 ▶ 运行则没有这个问题。
 
-**调试时输入 `scanf` 没反应** — 打开 `cDebug.externalConsole`，程序会在独立控制台窗口运行。
+**编译报 `undefined reference`**
+多文件项目里出现了多个 `main`，或者 `cDebug.buildMode` 还是 `currentFile`。改设置或只保留一个入口文件。
 
-**中文输出乱码** — Windows 控制台编码问题，可在程序里 `system("chcp 65001");`。
-
-**多文件项目报 `multiple definition of main`** — 工作区里有多个 `main`，把 `cDebug.buildMode` 改回 `currentFile`。
-
----
-
-## 发布到 VS Code 插件市场
-
-### 1. 注册两样东西
-
-1. **Azure DevOps 账号**：<https://dev.azure.com>（用微软账号登录即可，免费）
-2. **Marketplace 发布者**：<https://marketplace.visualstudio.com/manage> → `Create publisher`
-
-   记下 **Publisher ID**（不是显示名），并保证它与 `package.json` 里的 `publisher` 完全一致。当前是 `woodendrifter`，改成你自己的。
-
-### 2. 生成 Personal Access Token（PAT）
-
-Azure DevOps → 右上角头像 → `Personal access tokens` → `New Token`：
-
-- **Organization**：选 `All accessible organizations`
-- **Expiration**：最长 1 年
-- **Scopes**：点 `Show all scopes`，只勾 **Marketplace → Manage**
-
-token 只显示一次，先复制出来。
-
-### 3. 打包并发布
-
-```bash
-cd c-oneclick-debug
-
-# 先本地自检：能不能打包成功
-npx --yes @vscode/vsce package --no-dependencies
-
-# 登录（把 token 存到本地，二选一）
-npx --yes @vscode/vsce login woodendrifter
-# 或者每次发布都传 token
-npx --yes @vscode/vsce publish --no-dependencies -p <你的PAT>
-
-# 后续发版：改 package.json 的 version，然后
-npx --yes @vscode/vsce publish minor    # 0.2.0 -> 0.3.0
-npx --yes @vscode/vsce publish patch    # 0.2.0 -> 0.2.1
-```
-
-`vsce publish` 会自动打包、上传、递增版本号。发布后几分钟内就能在 Marketplace 搜到，也可以直接分享链接：
-
-```
-https://marketplace.visualstudio.com/items?itemName=woodendrifter.c-oneclick-debug
-```
-
-### 发布前检查清单
-
-- [ ] `package.json` 的 `publisher` 与 Marketplace 发布者 ID 一致
-- [ ] `name` 全小写，只含字母数字和连字符
-- [ ] `version` 比线上版本大
-- [ ] `displayName` / `description` / `categories` / `keywords` 填好（影响搜索）
-- [ ] `README.md` 会作为详情页，写清楚怎么用
-- [ ] `LICENSE` 文件存在，`license` 字段一致
-- [ ] `icon` 为 128×128 PNG
-- [ ] `repository` 字段填上 GitHub 地址（否则有一条 warning）
-- [ ] `.vscodeignore` 排除 `test/`、`tools/` 等（已配好）
-
-常见报错：
-
-| 报错 | 原因 |
-| --- | --- |
-| `This publisher is not verified` | 发布者没创建，或 ID 拼错 |
-| `Personal Access Token verification has failed` | PAT 没勾 `Marketplace → Manage`，或组织没选 All accessible |
-| `Version 0.2.0 is already published` | 忘改版本号 |
-| `Missing publisher name` | `package.json` 缺 `publisher` |
-
-## 托管到 GitHub
-
-### 1. 推到 GitHub
-
-```bash
-cd c-oneclick-debug
-git init
-git add .
-git commit -m "feat: C 一键调试扩展 0.2.0"
-git branch -M main
-
-# 先在 GitHub 网页新建一个空仓库，再把地址填进来
-git remote add origin https://github.com/<你的用户名>/c-oneclick-debug.git
-git push -u origin main
-```
-
-### 2. 把 vsix 挂到 Release
-
-```bash
-npx --yes @vscode/vsce package --no-dependencies   # 生成 c-oneclick-debug-0.2.0.vsix
-
-# 用 GitHub CLI（需先 gh auth login）
-gh release create v0.2.0 c-oneclick-debug-0.2.0.vsix --title "v0.2.0" --notes "首个版本"
-
-# 或者手动：仓库页 Releases -> Draft a new release -> 上传 vsix
-```
-
-仓库里已放好 `.github/workflows/release.yml`：以后只要推一个 `v*` 标签，CI 自动打包 vsix 并挂到 Release。
-
-```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-> 想顺便自动发市场？在仓库 Settings → Secrets 加一个 `VSCE_PAT`（就是上面那个 token），再把 workflow 里注释掉的 publish 步骤打开。
-
-### 3. 别人怎么本地安装
-
-**A. 下载 vsix（最简单）**
-
-从仓库 Releases 下载 `c-oneclick-debug-0.2.0.vsix`，然后：
-
-```bash
-code --install-extension c-oneclick-debug-0.2.0.vsix
-```
-
-或 VS Code 里 `Ctrl+Shift+P` → `Extensions: Install from VSIX...` → 选文件 → 重启窗口。
-
-**B. 直接拷贝源码目录（适合改着玩）**
-
-```bash
-git clone https://github.com/<你的用户名>/c-oneclick-debug.git
-# 把 c-oneclick-debug 整个文件夹复制到扩展目录
-#   Windows: %USERPROFILE%\.vscode\extensions\
-#   macOS/Linux: ~/.vscode/extensions/
-```
-
-重启 VS Code 即可。改完代码 `Developer: Reload Window` 就生效（纯 JS，无编译步骤）。
-
-**C. 克隆后自己打包**
-
-```bash
-git clone https://github.com/<你的用户名>/c-oneclick-debug.git
-cd c-oneclick-debug
-npx --yes @vscode/vsce package --no-dependencies
-code --install-extension c-oneclick-debug-0.2.0.vsix
-```
-
-**D. 开发调试这个扩展**
-
-用 VS Code 打开源码目录按 `F5`，会启动一个"扩展开发宿主"窗口，里面加载的是当前源码，可以直接给扩展下断点。仓库已带 `.vscode/launch.json`。
+**改了配置不生效**
+本扩展生成的那一条配置名为 `C: 一键调试`（单文件）或 `C: 一键调试（整个目录）`，在 `launch.json` 里按名字找。
 
 ## 开发
 
 ```bash
-node test/run-tests.js        # 核心逻辑测试（不需要启动 VS Code）
-node tools/make-icon.js       # 重新生成图标
-npm run package               # 打包 vsix
+npm test          # 43 项测试：配置合并、main 定位、真实 gcc 编译、真实 gdb 断点命中、编排流程
+npm run icon      # 重新生成图标
+npm run package   # 打包 vsix
 ```
 
-源码结构：
+调试扩展本身：用 VS Code 打开本目录，F5 启动扩展开发宿主。
 
-```
-src/
-  extension.js    命令注册、流程编排（运行 / 调试 / 三种生成）
-  toolchain.js    编译器与调试器探测
-  csource.js      源码解析（main 定位、源文件收集）
-  configFiles.js  tasks / launch 生成与合并（含 JSONC 解析、覆盖策略）
-  debug.js        调试启动、断点管理、编译执行
-  output.js       输出面板
-```
+## 许可证
+
+MIT

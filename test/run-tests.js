@@ -104,9 +104,37 @@ const stub = {
       return terminal;
     },
     onDidCloseTerminal: () => ({ dispose() {} }),
+    onDidChangeActiveTextEditor: (handler) => {
+      stub.__activeEditorListeners.push(handler);
+      return { dispose() {} };
+    },
+    createStatusBarItem: (alignment, priority) => {
+      const item = {
+        alignment,
+        priority,
+        text: '',
+        tooltip: '',
+        command: undefined,
+        visible: false,
+        show: () => {
+          item.visible = true;
+        },
+        hide: () => {
+          item.visible = false;
+        },
+        dispose: () => {}
+      };
+      stub.__statusBarItems.push(item);
+      return item;
+    },
+    showQuickPick: async (items, options) => {
+      stub.__quickPickCalls.push({ items, options });
+      return stub.__quickPickAnswer === undefined ? undefined : items[stub.__quickPickAnswer];
+    },
     visibleTextEditors: [],
     activeTextEditor: undefined
   },
+  StatusBarAlignment: { Left: 1, Right: 2 },
   env: { shell: 'C:\\Windows\\System32\\cmd.exe' },
   extensions: {
     getExtension: (id) => (id === 'ms-vscode.cpptools' ? { id, isActive: true } : undefined)
@@ -200,6 +228,10 @@ stub.__exitCode = 0;
 stub.__terminals = [];
 stub.__warningAnswer = undefined;
 stub.__warningPrompted = [];
+stub.__activeEditorListeners = [];
+stub.__statusBarItems = [];
+stub.__quickPickCalls = [];
+stub.__quickPickAnswer = undefined;
 
 // 让 require('vscode') 返回桩对象
 const STUB_ID = path.join(ROOT, '__vscode_stub__.js');
@@ -518,7 +550,7 @@ async function main() {
   const tasksPath = path.join(vsDir, 'tasks.json');
   const launchPath = path.join(vsDir, 'launch.json');
 
-  await test('activate 注册了全部 7 个命令', () => {
+  await test('activate 注册了全部 8 个命令', () => {
     assert.deepStrictEqual(Object.keys(handlers).sort(), [
       'cDebug.breakAtMain',
       'cDebug.buildOnly',
@@ -526,8 +558,39 @@ async function main() {
       'cDebug.generateAll',
       'cDebug.generateLaunch',
       'cDebug.generateTasks',
+      'cDebug.panel',
       'cDebug.run'
     ]);
+  });
+
+  await test('状态栏按钮只在 C 文件激活时显示，且点击走 panel 命令', () => {
+    assert.strictEqual(stub.__statusBarItems.length, 1, '应创建 1 个状态栏按钮');
+    const item = stub.__statusBarItems[0];
+    assert.ok(item.text.includes('配置'), `按钮文案应含“配置”，实际: ${item.text}`);
+    assert.strictEqual(item.command, 'cDebug.panel');
+    assert.strictEqual(item.visible, true, '当前编辑器是 C 文件，按钮应可见');
+
+    stub.window.activeTextEditor = { document: { languageId: 'python' } };
+    stub.__activeEditorListeners.forEach((fn) => fn());
+    assert.strictEqual(item.visible, false, '切到非 C 文件应隐藏');
+
+    stub.window.activeTextEditor = { document: helloDoc };
+    stub.__activeEditorListeners.forEach((fn) => fn());
+    assert.strictEqual(item.visible, true, '切回 C 文件应重新显示');
+  });
+
+  await test('panel 命令把选择转发给对应命令', async () => {
+    const panelIndex = stub.__quickPickCalls.length;
+    stub.__quickPickAnswer = undefined; // 先模拟用户取消
+    await handlers['cDebug.panel']();
+    assert.ok(stub.__quickPickCalls.length > panelIndex, '应弹出快捷面板');
+    const { items } = stub.__quickPickCalls[panelIndex];
+    const commands = items.map((i) => i.command);
+    assert.ok(commands.includes('cDebug.generateAll'), '面板应含一键生成');
+    assert.ok(commands.includes('cDebug.generateTasks'), '面板应含只生成 tasks');
+    assert.ok(commands.includes('cDebug.generateLaunch'), '面板应含只生成 launch');
+    assert.ok(commands.includes('cDebug.debug'), '面板应含调试');
+    assert.ok(commands.includes('cDebug.run'), '面板应含运行');
   });
 
   await test('只生成 tasks.json，不碰 launch.json', async () => {
