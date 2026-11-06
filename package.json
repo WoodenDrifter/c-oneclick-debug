@@ -1,0 +1,304 @@
+{
+  "name": "c-oneclick-debug",
+  "displayName": "C 一键调试",
+  "description": "为 C 文件一键生成 tasks.json / launch.json，支持自动断点调试与直接运行，开箱即用。",
+  "version": "0.2.0",
+  "publisher": "woodendrifter",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "c",
+    "gcc",
+    "gdb",
+    "mingw",
+    "debug",
+    "run",
+    "tasks",
+    "launch"
+  ],
+  "icon": "media/icon.png",
+  "main": "./src/extension.js",
+  "extensionDependencies": [
+    "ms-vscode.cpptools"
+  ],
+  "activationEvents": [
+    "onLanguage:c",
+    "onCommand:cDebug.run",
+    "onCommand:cDebug.debug",
+    "onCommand:cDebug.generateAll",
+    "onCommand:cDebug.generateTasks",
+    "onCommand:cDebug.generateLaunch",
+    "onCommand:cDebug.buildOnly",
+    "onCommand:cDebug.breakAtMain"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "cDebug.run",
+        "title": "编译并运行（跑到结束）",
+        "category": "C",
+        "icon": "$(play)"
+      },
+      {
+        "command": "cDebug.debug",
+        "title": "编译并自动断点调试",
+        "category": "C",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "cDebug.generateAll",
+        "title": "一键生成 tasks.json + launch.json",
+        "category": "C",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "cDebug.generateTasks",
+        "title": "只生成 tasks.json",
+        "category": "C",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "cDebug.generateLaunch",
+        "title": "只生成 launch.json",
+        "category": "C",
+        "icon": "$(bug)"
+      },
+      {
+        "command": "cDebug.buildOnly",
+        "title": "只编译，不运行",
+        "category": "C",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "cDebug.breakAtMain",
+        "title": "在 main 函数处设置断点",
+        "category": "C",
+        "icon": "$(circle-filled)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "cDebug.run",
+          "when": "editorLangId == c",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cDebug.debug",
+          "when": "editorLangId == c",
+          "group": "navigation@2"
+        },
+        {
+          "command": "cDebug.generateAll",
+          "when": "editorLangId == c",
+          "group": "navigation@3"
+        }
+      ],
+      "editor/title/run": [
+        {
+          "command": "cDebug.run",
+          "when": "editorLangId == c",
+          "group": "cDebug@1"
+        },
+        {
+          "command": "cDebug.debug",
+          "when": "editorLangId == c",
+          "group": "cDebug@2"
+        },
+        {
+          "command": "cDebug.generateAll",
+          "when": "editorLangId == c",
+          "group": "cDebug@10"
+        },
+        {
+          "command": "cDebug.generateTasks",
+          "when": "editorLangId == c",
+          "group": "cDebug@11"
+        },
+        {
+          "command": "cDebug.generateLaunch",
+          "when": "editorLangId == c",
+          "group": "cDebug@12"
+        },
+        {
+          "command": "cDebug.buildOnly",
+          "when": "editorLangId == c",
+          "group": "cDebug@20"
+        },
+        {
+          "command": "cDebug.breakAtMain",
+          "when": "editorLangId == c",
+          "group": "cDebug@21"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "cDebug.run",
+          "when": "resourceExtname == .c",
+          "group": "cDebug@1"
+        },
+        {
+          "command": "cDebug.debug",
+          "when": "resourceExtname == .c",
+          "group": "cDebug@2"
+        },
+        {
+          "command": "cDebug.generateAll",
+          "when": "resourceExtname == .c",
+          "group": "cDebug@10"
+        },
+        {
+          "command": "cDebug.generateTasks",
+          "when": "resourceExtname == .c",
+          "group": "cDebug@11"
+        },
+        {
+          "command": "cDebug.generateLaunch",
+          "when": "resourceExtname == .c",
+          "group": "cDebug@12"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "cDebug.run",
+          "when": "editorLangId == c"
+        },
+        {
+          "command": "cDebug.debug",
+          "when": "editorLangId == c"
+        },
+        {
+          "command": "cDebug.generateAll",
+          "when": "editorLangId == c"
+        },
+        {
+          "command": "cDebug.generateTasks",
+          "when": "editorLangId == c"
+        },
+        {
+          "command": "cDebug.generateLaunch",
+          "when": "editorLangId == c"
+        },
+        {
+          "command": "cDebug.buildOnly",
+          "when": "editorLangId == c"
+        },
+        {
+          "command": "cDebug.breakAtMain",
+          "when": "editorLangId == c"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "C 一键调试",
+      "properties": {
+        "cDebug.buildMode": {
+          "type": "string",
+          "enum": [
+            "currentFile",
+            "folder"
+          ],
+          "enumDescriptions": [
+            "只编译当前打开的 .c 文件（单文件练习最常用）",
+            "编译工作区目录下所有 .c 文件并链接成一个可执行文件（多文件项目）"
+          ],
+          "default": "currentFile",
+          "markdownDescription": "编译范围。`currentFile` 编译当前文件；`folder` 编译工作区内全部 `.c`。"
+        },
+        "cDebug.compilerPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "编译器绝对路径。留空自动探测 `gcc`（其次 `clang`），会依次查找 PATH 与常见 MinGW/MSYS2 安装位置。"
+        },
+        "cDebug.debuggerPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "调试器（gdb）绝对路径，写入 launch.json 的 `miDebuggerPath`。留空自动探测（优先取与 gcc 同目录的 gdb）。"
+        },
+        "cDebug.compilerArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "-g",
+            "-O0",
+            "-Wall",
+            "-Wextra"
+          ],
+          "markdownDescription": "编译参数。默认 `-g -O0` 保证可调试。"
+        },
+        "cDebug.programArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "程序运行参数（运行与调试都会带上）。"
+        },
+        "cDebug.externalConsole": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "调试时是否使用外部控制台窗口（调试模式下需要 `scanf` 输入时建议开启）。"
+        },
+        "cDebug.buildBeforeDebug": {
+          "type": "boolean",
+          "default": true,
+          "description": "调试前自动编译一次。"
+        },
+        "cDebug.autoBreakpoint": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "开始调试时自动在 `main` 函数处设置断点。"
+        },
+        "cDebug.breakpointMode": {
+          "type": "string",
+          "enum": [
+            "keep",
+            "once"
+          ],
+          "enumDescriptions": [
+            "断点保留在编辑器里，下次调试仍然有效",
+            "程序在 main 停住后自动移除该断点（一次性）"
+          ],
+          "default": "keep",
+          "description": "自动断点的生命周期。"
+        },
+        "cDebug.autoBreakpointScope": {
+          "type": "string",
+          "enum": [
+            "managed",
+            "all"
+          ],
+          "enumDescriptions": [
+            "只对本扩展生成/托管的启动配置生效，不影响你自己的 launch.json 配置",
+            "对所有 cppdbg 启动配置生效"
+          ],
+          "default": "managed",
+          "description": "自动断点的作用范围。"
+        },
+        "cDebug.autoGenerateConfig": {
+          "type": "boolean",
+          "default": true,
+          "description": "运行时若缺少 .vscode/tasks.json 或 launch.json，自动生成。"
+        },
+        "cDebug.syncConfigOnDebug": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "运行/调试时按当前设置刷新 `tasks.json` / `launch.json`（只更新本扩展生成的那一条，其余配置保留）。若你习惯手改这两个文件，可关闭。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node test/run-tests.js",
+    "icon": "node tools/make-icon.js",
+    "package": "npx --yes @vscode/vsce package --no-dependencies"
+  }
+}
