@@ -6,8 +6,8 @@ const path = require('path');
 const vscode = require('vscode');
 
 const { log } = require('./output');
-const { findEntryPoint, findMainPosition } = require('./csource');
-const { createPlan, writeConfigFiles, CONFIG_NAME } = require('./configFiles');
+const { findEntryPoint, findMainPosition, isCSourceDocument, isCppDocument } = require('./csource');
+const { createPlan, writeConfigFiles, CONFIG_NAME, configName } = require('./configFiles');
 
 /** 本次会话中由扩展自动添加的断点 */
 const state = {
@@ -251,7 +251,7 @@ class CConfigProvider {
 
     const cfg = vscode.workspace.getConfiguration('cDebug');
     const editor = vscode.window.activeTextEditor;
-    const doc = editor && editor.document.languageId === 'c' ? editor.document : undefined;
+    const doc = editor && isCSourceDocument(editor.document) ? editor.document : undefined;
 
     // 空配置（无 launch.json 时按 F5）走默认值
     if (!config.type) {
@@ -260,7 +260,8 @@ class CConfigProvider {
       config.name = config.name || CONFIG_NAME;
     }
 
-    const isManaged = config.name === CONFIG_NAME || !config.program;
+    const isManaged =
+      config.name === CONFIG_NAME || config.name === configName(true) || !config.program;
     const scope = cfg.get('autoBreakpointScope') || 'managed';
     const shouldManage = isManaged || scope === 'all';
 
@@ -287,7 +288,7 @@ class CConfigProvider {
   async fillFromPlan(config, doc) {
     try {
       const { detectToolchain } = require('./toolchain');
-      const toolchain = detectToolchain();
+      const toolchain = detectToolchain(isCppDocument(doc));
       if (!toolchain) return;
       const plan = await createPlan(doc, toolchain);
       if (!plan) return;
@@ -315,7 +316,7 @@ class CConfigProvider {
       if (fs.existsSync(tasksPath) && fs.existsSync(launchPath)) return;
 
       const { detectToolchain } = require('./toolchain');
-      const toolchain = detectToolchain();
+      const toolchain = detectToolchain(isCppDocument(doc));
       if (!toolchain) return;
       const plan = await createPlan(doc, toolchain);
       if (!plan) return;
@@ -331,7 +332,7 @@ class CConfigProvider {
   async applyAutoBreakpoint(doc) {
     try {
       const mode = vscode.workspace.getConfiguration('cDebug').get('buildMode');
-      const entry = await findEntryPoint(doc, mode === 'folder' ? 'folder' : 'currentFile');
+      const entry = await findEntryPoint(doc, mode === 'folder' ? 'folder' : 'currentFile', isCppDocument(doc));
       if (!entry) {
         log('未在源码中找到 main 函数，跳过自动断点');
         return;

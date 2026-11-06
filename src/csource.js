@@ -6,6 +6,15 @@ const vscode = require('vscode');
 /** 遍历工作区时跳过的目录 */
 const EXCLUDE_GLOB = '**/{node_modules,.git,.svn,.hg,build,out,bin,obj,dist,target,.vscode}/**';
 
+/** VS Code 里被视为 C 的语言 ID */
+const C_LANG_IDS = ['c', 'objective-c'];
+/** VS Code 里被视为 C++ 的语言 ID */
+const CPP_LANG_IDS = ['cpp', 'c++', 'objective-c++', 'cuda-cpp'];
+/** 视为 C++ 源码的文件后缀 */
+const CPP_EXTS = ['.cpp', '.cc', '.cxx', '.c++', '.hpp', '.hh', '.hxx', '.h'];
+/** 视为 C 源码的文件后缀 */
+const C_EXTS = ['.c', '.h'];
+
 /**
  * 去掉 C 源码里的注释、字符串与字符字面量（保留换行与字符偏移，便于定位行号）。
  * @param {string} text
@@ -136,22 +145,41 @@ function findMainPosition(text) {
 }
 
 /**
+ * 是否为 C++ 源码（.cpp / .cc / .cxx 等，或语言 ID 为 cpp）。
+ * @param {vscode.TextDocument} doc
+ */
+function isCppDocument(doc) {
+  if (!doc) return false;
+  if (CPP_LANG_IDS.includes(doc.languageId)) return true;
+  if (C_LANG_IDS.includes(doc.languageId)) return false;
+  const ext = path.extname((doc.uri && doc.uri.fsPath) || '').toLowerCase();
+  return CPP_EXTS.includes(ext);
+}
+
+/**
+ * 是否为 C / C++ 源码（决定按钮与命令是否可用）。
  * @param {vscode.TextDocument} doc
  */
 function isCSourceDocument(doc) {
   if (!doc) return false;
-  if (doc.languageId === 'c') return true;
-  const ext = path.extname(doc.uri.fsPath || '').toLowerCase();
-  return ext === '.c' || ext === '.h';
+  if (C_LANG_IDS.includes(doc.languageId) || CPP_LANG_IDS.includes(doc.languageId)) return true;
+  const ext = path.extname((doc.uri && doc.uri.fsPath) || '').toLowerCase();
+  return C_EXTS.includes(ext) || CPP_EXTS.includes(ext);
 }
 
 /**
- * 列出工作区内的 C 源文件（相对路径，正斜杠）。
+ * 列出工作区内的 C / C++ 源文件（相对路径，正斜杠）。
  * @param {vscode.WorkspaceFolder} folder
+ * @param {boolean} [isCpp] true 时收集 C++ 源文件（没有则回退到 .c）
  * @returns {Promise<{ absolute: string, relative: string }[]>}
  */
-async function listWorkspaceSources(folder) {
-  const found = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.c'), EXCLUDE_GLOB, 500);
+async function listWorkspaceSources(folder, isCpp = false) {
+  const relPattern = isCpp ? '**/*.{cpp,cc,cxx,c++}' : '**/*.c';
+  let found = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, relPattern), EXCLUDE_GLOB, 500);
+  if (!found.length && isCpp) {
+    // 纯 C++ 目录里没有 C++ 源文件时，退回编译 .c
+    found = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, '**/*.c'), EXCLUDE_GLOB, 500);
+  }
   const files = found
     .map((uri) => {
       const absolute = uri.fsPath;
@@ -164,12 +192,13 @@ async function listWorkspaceSources(folder) {
 }
 
 /**
- * 查找入口文件（含 main 的 .c）。
+ * 查找入口文件（含 main 的源文件）。
  * @param {vscode.TextDocument | undefined} preferred
  * @param {'currentFile'|'folder'} mode
+ * @param {boolean} [isCpp]
  * @returns {Promise<{ uri: vscode.Uri, position: { line: number, character: number } } | null>}
  */
-async function findEntryPoint(preferred, mode) {
+async function findEntryPoint(preferred, mode, isCpp = false) {
   if (preferred) {
     const pos = findMainPosition(preferred.getText());
     if (pos) return { uri: preferred.uri, position: pos };
@@ -177,8 +206,12 @@ async function findEntryPoint(preferred, mode) {
 
   if (mode !== 'folder') return null;
 
-  const found = await vscode.workspace.findFiles('**/*.c', EXCLUDE_GLOB, 300);
-  for (const uri of found) {
+  const candidates = await vscode.workspace.findFiles(
+    isCpp ? '**/*.{cpp,cc,cxx,c++}' : '**/*.c',
+    EXCLUDE_GLOB,
+    300
+  );
+  for (const uri of candidates) {
     try {
       const doc = await vscode.workspace.openTextDocument(uri);
       const pos = findMainPosition(doc.getText());
@@ -192,11 +225,16 @@ async function findEntryPoint(preferred, mode) {
 
 /**
  * 统计工作区内包含 main 的文件，用于多文件项目的冲突提示。
+ * @param {boolean} [isCpp]
  * @returns {Promise<vscode.Uri[]>}
  */
-async function findFilesWithMain() {
+async function findFilesWithMain(isCpp = false) {
   const result = [];
-  const found = await vscode.workspace.findFiles('**/*.c', EXCLUDE_GLOB, 300);
+  const found = await vscode.workspace.findFiles(
+    isCpp ? '**/*.{cpp,cc,cxx,c++}' : '**/*.c',
+    EXCLUDE_GLOB,
+    300
+  );
   for (const uri of found) {
     try {
       const doc = await vscode.workspace.openTextDocument(uri);
@@ -212,8 +250,11 @@ module.exports = {
   stripCommentsAndStrings,
   findMainPosition,
   isCSourceDocument,
+  isCppDocument,
   listWorkspaceSources,
   findEntryPoint,
   findFilesWithMain,
+  C_EXTS,
+  CPP_EXTS,
   EXCLUDE_GLOB
 };

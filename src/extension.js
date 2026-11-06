@@ -7,7 +7,7 @@ const vscode = require('vscode');
 const { getOutput, log, reveal } = require('./output');
 const { detectToolchain, getCompilerVersion } = require('./toolchain');
 const { createPlan, writeConfigFiles, CONFIG_NAME } = require('./configFiles');
-const { findEntryPoint, findFilesWithMain } = require('./csource');
+const { findEntryPoint, findFilesWithMain, isCSourceDocument, isCppDocument } = require('./csource');
 const {
   CConfigProvider,
   setBreakpointAt,
@@ -22,15 +22,15 @@ const {
 let runTerminal;
 
 /**
- * 取当前 C 文档（活动编辑器优先，其次任意可见的 C 编辑器）。
+ * 取当前 C / C++ 文档（活动编辑器优先，其次任意可见的 C / C++ 编辑器）。
  * @returns {vscode.TextDocument | undefined}
  */
 function getActiveCDocument() {
   const active = vscode.window.activeTextEditor;
-  if (active && active.document.languageId === 'c') {
+  if (active && isCSourceDocument(active.document)) {
     return active.document;
   }
-  const visible = vscode.window.visibleTextEditors.find((e) => e.document.languageId === 'c');
+  const visible = vscode.window.visibleTextEditors.find((e) => isCSourceDocument(e.document));
   return visible ? visible.document : undefined;
 }
 
@@ -40,7 +40,7 @@ function getActiveCDocument() {
  * @returns {Promise<vscode.TextDocument | undefined>}
  */
 async function resolveDocument(arg) {
-  if (arg && typeof arg.fsPath === 'string' && /\.c$/i.test(arg.fsPath)) {
+  if (arg && typeof arg.fsPath === 'string' && /\.(c|cpp|cc|cxx|c\+\+)$/i.test(arg.fsPath)) {
     try {
       return await vscode.workspace.openTextDocument(arg);
     } catch {
@@ -57,7 +57,7 @@ async function resolveDocument(arg) {
 async function requireCDocument(arg) {
   const doc = await resolveDocument(arg);
   if (!doc) {
-    vscode.window.showWarningMessage('请先打开一个 C 源文件（.c）再使用该命令。');
+    vscode.window.showWarningMessage('请先打开一个 C / C++ 源文件（.c / .cpp）再使用该命令。');
     return undefined;
   }
   if (doc.isUntitled) {
@@ -85,11 +85,13 @@ function shouldSyncConfigs(folder) {
 
 /**
  * 没有找到编译器时的引导。
+ * @param {boolean} [isCpp]
  */
-function showNoToolchainHelp() {
+function showNoToolchainHelp(isCpp = false) {
+  const names = isCpp ? 'g++ / clang++' : 'gcc / clang';
   vscode.window
     .showErrorMessage(
-      '未找到 C 编译器（gcc / clang）。请安装 MinGW-w64 并加入 PATH，或在设置中指定编译器路径。',
+      `未找到 C/${isCpp ? 'C++' : 'C'} 编译器（${names}）。请安装 MinGW-w64 并加入 PATH，或在设置中指定编译器路径。`,
       '打开设置',
       '查看输出'
     )
@@ -141,9 +143,9 @@ async function preparePlan(arg) {
   const doc = await requireCDocument(arg);
   if (!doc) return null;
 
-  const toolchain = detectToolchain();
+  const toolchain = detectToolchain(isCppDocument(doc));
   if (!toolchain) {
-    showNoToolchainHelp();
+    showNoToolchainHelp(isCppDocument(doc));
     return null;
   }
 
@@ -194,7 +196,7 @@ async function commandGenerate(which, arg) {
 
   // folder 模式下多入口会导致链接失败，提前提醒
   if (plan.mode === 'folder') {
-    const mains = await findFilesWithMain();
+    const mains = await findFilesWithMain(plan.isCpp);
     if (mains.length > 1) {
       const names = mains.map((u) => path.basename(u.fsPath)).join('、');
       const choice = await vscode.window.showWarningMessage(
@@ -312,9 +314,10 @@ async function commandDebug(arg) {
 
   if (!(await ensureCppTools())) return;
 
-  const toolchain = detectToolchain();
+  const isCpp = isCppDocument(doc);
+  const toolchain = detectToolchain(isCpp);
   if (!toolchain) {
-    showNoToolchainHelp();
+    showNoToolchainHelp(isCpp);
     return;
   }
   if (!toolchain.debuggerPath) {
@@ -348,7 +351,7 @@ async function commandDebug(arg) {
   }
 
   if (cfg.get('autoBreakpoint', true)) {
-    const entry = await findEntryPoint(doc, plan.mode);
+    const entry = await findEntryPoint(doc, plan.mode, plan.isCpp);
     if (entry) {
       setBreakpointAt(entry.uri, entry.position);
     } else {
@@ -478,13 +481,13 @@ const PANEL_ITEMS = [
 function registerStatusBar(context) {
   if (typeof vscode.window.createStatusBarItem !== 'function') return;
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  item.text = '$(gear) C 配置';
-  item.tooltip = 'C 一键调试：生成 tasks.json / launch.json、运行、调试';
+  item.text = '$(gear) C/C++ 配置';
+  item.tooltip = 'C/C++ 一键调试：生成 tasks.json / launch.json、运行、调试';
   item.command = 'cDebug.panel';
 
   const refresh = () => {
     const editor = vscode.window.activeTextEditor;
-    if (editor && editor.document.languageId === 'c') item.show();
+    if (editor && isCSourceDocument(editor.document)) item.show();
     else item.hide();
   };
   refresh();

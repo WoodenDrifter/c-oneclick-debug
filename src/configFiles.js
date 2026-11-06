@@ -5,11 +5,31 @@ const path = require('path');
 const vscode = require('vscode');
 
 const { log } = require('./output');
-const { listWorkspaceSources } = require('./csource');
+const { listWorkspaceSources, isCppDocument } = require('./csource');
 
 const TASK_LABEL_CURRENT = 'C: 编译当前文件';
 const TASK_LABEL_FOLDER = 'C: 编译工作区全部源文件';
 const CONFIG_NAME = 'C: 自动断点调试';
+const CPP_TASK_LABEL_CURRENT = 'C++: 编译当前文件';
+const CPP_TASK_LABEL_FOLDER = 'C++: 编译工作区全部源文件';
+const CPP_CONFIG_NAME = 'C++: 自动断点调试';
+
+/**
+ * 按语言取任务标签 / 启动配置名，C 与 C++ 各自独立，互不覆盖。
+ * @param {boolean} isCpp
+ * @param {'currentFile'|'folder'} mode
+ */
+function taskLabel(isCpp, mode) {
+  if (isCpp) return mode === 'folder' ? CPP_TASK_LABEL_FOLDER : CPP_TASK_LABEL_CURRENT;
+  return mode === 'folder' ? TASK_LABEL_FOLDER : TASK_LABEL_CURRENT;
+}
+
+/**
+ * @param {boolean} isCpp
+ */
+function configName(isCpp) {
+  return isCpp ? CPP_CONFIG_NAME : CONFIG_NAME;
+}
 
 /**
  * 容错解析 JSONC（带注释、尾随逗号的 JSON）。
@@ -135,12 +155,14 @@ async function createPlan(doc, toolchain) {
   const fileDir = path.dirname(filePath);
   const stem = path.basename(filePath, path.extname(filePath));
   const exeSuffix = toolchain.exeSuffix;
+  const isCpp = isCppDocument(doc) || !!toolchain.isCpp;
 
   const mode = requestedMode === 'folder' && workspaceFolder ? 'folder' : 'currentFile';
 
   /** @type {any} */
   const plan = {
     mode,
+    isCpp,
     toolchain,
     compilerArgs,
     programArgs,
@@ -151,7 +173,7 @@ async function createPlan(doc, toolchain) {
   };
 
   if (mode === 'folder') {
-    const sources = await listWorkspaceSources(workspaceFolder);
+    const sources = await listWorkspaceSources(workspaceFolder, isCpp);
     if (!sources.length) {
       return null;
     }
@@ -162,7 +184,7 @@ async function createPlan(doc, toolchain) {
     plan.programVar = `\${workspaceFolder}/${plan.outName}`;
     plan.cwdAbs = workspaceFolder.uri.fsPath;
     plan.cwdVar = '${workspaceFolder}';
-    plan.label = TASK_LABEL_FOLDER;
+    plan.label = taskLabel(isCpp, 'folder');
     plan.taskArgsVar = [
       ...compilerArgs,
       ...sources.map((s) => `\${workspaceFolder}/${s.relative}`),
@@ -177,7 +199,7 @@ async function createPlan(doc, toolchain) {
     plan.programVar = `\${fileDirname}/${plan.outName}`;
     plan.cwdAbs = fileDir;
     plan.cwdVar = '${fileDirname}';
-    plan.label = TASK_LABEL_CURRENT;
+    plan.label = taskLabel(isCpp, 'currentFile');
     plan.taskArgsVar = [...compilerArgs, '${file}', '-o', plan.programVar];
     plan.compileArgs = [...compilerArgs, filePath, '-o', plan.programAbs];
   }
@@ -195,7 +217,7 @@ async function createPlan(doc, toolchain) {
   };
 
   plan.launch = {
-    name: CONFIG_NAME,
+    name: configName(isCpp),
     type: 'cppdbg',
     request: 'launch',
     program: plan.programVar,
@@ -333,6 +355,11 @@ module.exports = {
   TASK_LABEL_CURRENT,
   TASK_LABEL_FOLDER,
   CONFIG_NAME,
+  CPP_TASK_LABEL_CURRENT,
+  CPP_TASK_LABEL_FOLDER,
+  CPP_CONFIG_NAME,
+  taskLabel,
+  configName,
   parseJsonc,
   readJsonFile,
   writeJsonFile,

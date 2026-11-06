@@ -795,6 +795,92 @@ async function main() {
     cfgState.autoBreakpoint = true;
   });
 
+  console.log('\n[10] C++ 支持与命令可见性');
+
+  const cppPath = path.join(FIXTURE, 'cpp', 'main.cpp');
+  const cppDir = path.join(tmp, 'cpp');
+  fs.mkdirSync(cppDir, { recursive: true });
+  fs.copyFileSync(cppPath, path.join(cppDir, 'main.cpp'));
+  const cppPathRun = path.join(cppDir, 'main.cpp');
+  const cppDoc = {
+    uri: stub.Uri.file(cppPathRun),
+    languageId: 'cpp',
+    isUntitled: false,
+    isDirty: false,
+    getText: () => fs.readFileSync(cppPathRun, 'utf8'),
+    lineAt: () => ({ text: '' })
+  };
+
+  await test('源码判定：C 与 C++ 都算，其他语言不算', () => {
+    assert.strictEqual(csource.isCSourceDocument({ uri: stub.Uri.file('a.c'), languageId: 'c' }), true);
+    assert.strictEqual(csource.isCSourceDocument({ uri: stub.Uri.file('a.cpp'), languageId: 'cpp' }), true);
+    assert.strictEqual(csource.isCSourceDocument({ uri: stub.Uri.file('a.hpp'), languageId: 'cpp' }), true);
+    assert.strictEqual(csource.isCSourceDocument({ uri: stub.Uri.file('a.py'), languageId: 'python' }), false);
+    // 缺 uri 的文档不能抛异常
+    assert.strictEqual(csource.isCSourceDocument({ languageId: 'python' }), false);
+  });
+
+  await test('C++ 判定：.cpp 为真，.c 为假', () => {
+    assert.strictEqual(csource.isCppDocument(cppDoc), true);
+    assert.strictEqual(csource.isCppDocument({ uri: stub.Uri.file('a.c'), languageId: 'c' }), false);
+    assert.strictEqual(csource.isCppDocument({ uri: stub.Uri.file('a.cc'), languageId: 'cpp' }), true);
+  });
+
+  await test('C++ 源码里能定位 main', () => {
+    const pos = csource.findMainPosition(fs.readFileSync(cppPathRun, 'utf8'));
+    assert.ok(pos, '应找到 main');
+    assert.strictEqual(pos.line, 15, `main 应在第 16 行（index 15），实际 ${pos && pos.line}`);
+  });
+
+  await test('C++ 计划使用 g++ 与独立的 C++ 标签', async () => {
+    const cppToolchain = require('../src/toolchain').detectToolchain(true);
+    assert.ok(cppToolchain, '应探测到 C++ 编译器');
+    const cppPlan = await configFiles.createPlan(cppDoc, cppToolchain);
+    assert.ok(cppPlan, 'plan 不应为空');
+    assert.strictEqual(cppPlan.isCpp, true);
+    assert.strictEqual(cppPlan.label, configFiles.CPP_TASK_LABEL_CURRENT, '任务标签应为 C++ 那一套');
+    assert.strictEqual(cppPlan.launch.name, configFiles.CPP_CONFIG_NAME);
+    assert.ok(/g\+\+|clang\+\+|gcc|clang/i.test(path.basename(cppPlan.toolchain.compiler)), '编译器应为 C++ 编译器');
+  });
+
+  await test('C++ 计划能真实编译并运行', async () => {
+    const cppToolchain = require('../src/toolchain').detectToolchain(true);
+    const cppPlan = await configFiles.createPlan(cppDoc, cppToolchain);
+    const result = cp.spawnSync(cppPlan.toolchain.compiler, cppPlan.compileArgs, { encoding: 'utf8' });
+    assert.strictEqual(result.status, 0, `编译失败: ${result.stderr}`);
+    assert.ok(fs.existsSync(cppPlan.programAbs), '应生成可执行文件');
+    const run = cp.spawnSync(cppPlan.programAbs, [], { encoding: 'utf8' });
+    assert.ok(/Hello, C\+\+/.test(run.stdout), `运行输出不符: ${run.stdout}`);
+  });
+
+  await test('C 与 C++ 的任务标签互不覆盖', () => {
+    assert.notStrictEqual(configFiles.TASK_LABEL_CURRENT, configFiles.CPP_TASK_LABEL_CURRENT);
+    assert.notStrictEqual(configFiles.CONFIG_NAME, configFiles.CPP_CONFIG_NAME);
+  });
+
+  await test('清单：按钮与右键在 cpp 也出现，命令面板无条件可搜', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+    const menus = pkg.contributes.menus;
+
+    for (const id of ['editor/title', 'editor/title/run', 'editor/context']) {
+      for (const item of menus[id]) {
+        assert.ok(/editorLangId == c\b/.test(item.when) && /editorLangId == cpp/.test(item.when), `${id} 的 when 应同时含 c 与 cpp：${item.when}`);
+      }
+    }
+    for (const item of menus['explorer/context']) {
+      assert.ok(/resourceExtname == \.cpp/.test(item.when), `资源管理器右键应支持 .cpp：${item.when}`);
+    }
+    // 命令面板必须在任何编辑器下都能搜到，不能带 when
+    for (const item of menus.commandPalette) {
+      assert.strictEqual(item.when, undefined, `命令面板项不应限制 when：${item.command}`);
+    }
+    // 命令分类统一，方便在面板里搜 C/C++ 或 C:
+    for (const cmd of pkg.contributes.commands) {
+      assert.strictEqual(cmd.category, 'C/C++', `${cmd.command} 的分类应为 C/C++`);
+    }
+    assert.ok(pkg.activationEvents.includes('onLanguage:cpp'), '应声明 onLanguage:cpp');
+  });
+
   console.log(`\n结果: ${passed} 通过, ${failed} 失败\n`);
   fs.rmSync(tmp, { recursive: true, force: true });
   process.exit(failed ? 1 : 0);

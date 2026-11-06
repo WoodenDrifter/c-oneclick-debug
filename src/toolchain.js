@@ -144,7 +144,7 @@ function detectToolchain(isCpp = false) {
   log(`编译器: ${compiler}`);
   log(debuggerPath ? `调试器: ${debuggerPath}` : '调试器: 未找到 gdb（自动断点调试将不可用）');
 
-  return { compiler, kind, debuggerPath, exeSuffix: EXE_SUFFIX };
+  return { compiler, kind, debuggerPath, exeSuffix: EXE_SUFFIX, isCpp };
 }
 
 /**
