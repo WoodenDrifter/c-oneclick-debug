@@ -47,13 +47,6 @@
     "onCommand:cDebug.panel"
   ],
   "contributes": {
-    "submenus": [
-      {
-        "id": "cDebug.configSubmenu",
-        "label": "C 调试配置",
-        "icon": "$(gear)"
-      }
-    ],
     "commands": [
       {
         "command": "cDebug.run",
@@ -87,31 +80,6 @@
       }
     ],
     "menus": {
-      "editor/title": [
-        {
-          "submenu": "cDebug.configSubmenu",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "navigation@1"
-        }
-      ],
-      "cDebug.configSubmenu": [
-        {
-          "command": "cDebug.run",
-          "group": "c@1"
-        },
-        {
-          "command": "cDebug.debugRun",
-          "group": "c@2"
-        },
-        {
-          "command": "cDebug.debug",
-          "group": "c@3"
-        },
-        {
-          "command": "cDebug.generateAll",
-          "group": "c@4"
-        }
-      ],
       "editor/context": [
         {
           "command": "cDebug.run",

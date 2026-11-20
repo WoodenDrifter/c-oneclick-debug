@@ -870,16 +870,10 @@ async function main() {
     for (const item of menus['explorer/context']) {
       assert.ok(/resourceExtname == \.cpp/.test(item.when), `资源管理器右键应支持 .cpp：${item.when}`);
     }
-    // 标题栏只保留一个齿轮（下拉里含四项），不再有单独的运行/调试图标
-    assert.strictEqual(menus['editor/title'].length, 1, '标题栏只应有一个入口');
-    assert.strictEqual(menus['editor/title'][0].submenu, 'cDebug.configSubmenu');
-    assert.strictEqual(menus['editor/title/run'], undefined, '不应再向运行下拉里塞按钮');
-
-    // 齿轮下拉正好是那四项
-    assert.deepStrictEqual(
-      menus['cDebug.configSubmenu'].map((i) => i.command),
-      ['cDebug.run', 'cDebug.debugRun', 'cDebug.debug', 'cDebug.generateAll']
-    );
+    // 标题栏不放重复齿轮，统一用右下角状态栏入口；命令面板与右键菜单不受影响
+    assert.strictEqual(menus['editor/title'], undefined, '标题栏不应再有齿轮入口');
+    assert.strictEqual(menus['cDebug.configSubmenu'], undefined, '不应再声明齿轮子菜单');
+    assert.strictEqual(pkg.contributes.submenus, undefined, '不应再声明子菜单');
     // 命令面板必须在任何编辑器下都能搜到，不能带 when
     assert.deepStrictEqual(
       menus.commandPalette.map((i) => i.command),
