@@ -7,7 +7,7 @@ const vscode = require('vscode');
 
 const { log } = require('./output');
 const { findEntryPoint, findMainPosition, isCSourceDocument, isCppDocument } = require('./csource');
-const { createPlan, writeConfigFiles, CONFIG_NAME, configName } = require('./configFiles');
+const { createPlan, writeConfigFiles, CONFIG_NAME, configName, configNameRun } = require('./configFiles');
 
 /** 本次会话中由扩展自动添加的断点 */
 const state = {
@@ -179,16 +179,19 @@ function compileSync(plan) {
 /**
  * 启动调试（使用绝对路径，避免变量替换歧义）。
  * @param {any} plan
+ * @param {{ runThrough?: boolean }} [options] runThrough 为 true 时不设断点，直接跑到结束
  * @returns {Promise<boolean>}
  */
-async function startDebugSession(plan) {
+async function startDebugSession(plan, options = {}) {
   if (!plan.task) {
     return false;
   }
 
+  const runThrough = !!options.runThrough;
+
   /** @type {vscode.DebugConfiguration} */
   const config = {
-    name: CONFIG_NAME,
+    name: runThrough ? configNameRun(plan.isCpp) : configName(plan.isCpp),
     type: 'cppdbg',
     request: 'launch',
     program: plan.programAbs,
@@ -264,6 +267,8 @@ class CConfigProvider {
       config.name === CONFIG_NAME || config.name === configName(true) || !config.program;
     const scope = cfg.get('autoBreakpointScope') || 'managed';
     const shouldManage = isManaged || scope === 'all';
+    // 「调试（直接到底）」明确要求不停，交给用户自由操作
+    const isRunThrough = [configNameRun(false), configNameRun(true)].includes(config.name);
 
     if (doc && shouldManage) {
       if (!config.program) {
@@ -272,7 +277,7 @@ class CConfigProvider {
         await this.ensureConfigs(doc);
       }
 
-      if (cfg.get('autoBreakpoint', true)) {
+      if (!isRunThrough && cfg.get('autoBreakpoint', true)) {
         await this.applyAutoBreakpoint(doc);
       }
     }

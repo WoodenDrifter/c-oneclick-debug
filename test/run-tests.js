@@ -550,20 +550,17 @@ async function main() {
   const tasksPath = path.join(vsDir, 'tasks.json');
   const launchPath = path.join(vsDir, 'launch.json');
 
-  await test('activate 注册了全部 8 个命令', () => {
+  await test('activate 只注册 5 个命令（4 个功能 + 面板）', () => {
     assert.deepStrictEqual(Object.keys(handlers).sort(), [
-      'cDebug.breakAtMain',
-      'cDebug.buildOnly',
       'cDebug.debug',
+      'cDebug.debugRun',
       'cDebug.generateAll',
-      'cDebug.generateLaunch',
-      'cDebug.generateTasks',
       'cDebug.panel',
       'cDebug.run'
     ]);
   });
 
-  await test('状态栏按钮只在 C 文件激活时显示，且点击走 panel 命令', () => {
+  await test('状态栏按钮只在 C / C++ 文件激活时显示，且点击走 panel 命令', () => {
     assert.strictEqual(stub.__statusBarItems.length, 1, '应创建 1 个状态栏按钮');
     const item = stub.__statusBarItems[0];
     assert.ok(item.text.includes('配置'), `按钮文案应含“配置”，实际: ${item.text}`);
@@ -579,34 +576,24 @@ async function main() {
     assert.strictEqual(item.visible, true, '切回 C 文件应重新显示');
   });
 
-  await test('panel 命令把选择转发给对应命令', async () => {
+  await test('panel 命令只提供这四项', async () => {
     const panelIndex = stub.__quickPickCalls.length;
-    stub.__quickPickAnswer = undefined; // 先模拟用户取消
+    stub.__quickPickAnswer = undefined; // 模拟用户取消
     await handlers['cDebug.panel']();
     assert.ok(stub.__quickPickCalls.length > panelIndex, '应弹出快捷面板');
     const { items } = stub.__quickPickCalls[panelIndex];
-    const commands = items.map((i) => i.command);
-    assert.ok(commands.includes('cDebug.generateAll'), '面板应含一键生成');
-    assert.ok(commands.includes('cDebug.generateTasks'), '面板应含只生成 tasks');
-    assert.ok(commands.includes('cDebug.generateLaunch'), '面板应含只生成 launch');
-    assert.ok(commands.includes('cDebug.debug'), '面板应含调试');
-    assert.ok(commands.includes('cDebug.run'), '面板应含运行');
+    assert.deepStrictEqual(
+      items.map((i) => i.command),
+      ['cDebug.run', 'cDebug.debugRun', 'cDebug.debug', 'cDebug.generateAll']
+    );
   });
 
-  await test('只生成 tasks.json，不碰 launch.json', async () => {
+  await test('生成配置文件：一次写入两份，不分拆', async () => {
     fs.rmSync(vsDir, { recursive: true, force: true });
-    const result = await handlers['cDebug.generateTasks']();
+    const result = await handlers['cDebug.generateAll']();
     assert.ok(fs.existsSync(tasksPath), 'tasks.json 应被创建');
-    assert.ok(!fs.existsSync(launchPath), '不应创建 launch.json');
-    assert.ok(result && result.tasksPath);
-  });
-
-  await test('只生成 launch.json，不碰 tasks.json', async () => {
-    fs.rmSync(vsDir, { recursive: true, force: true });
-    const result = await handlers['cDebug.generateLaunch']();
     assert.ok(fs.existsSync(launchPath), 'launch.json 应被创建');
-    assert.ok(!fs.existsSync(tasksPath), '不应创建 tasks.json');
-    assert.ok(result && result.launchPath);
+    assert.ok(result.tasksPath && result.launchPath);
   });
 
   await test('一键生成两份配置', async () => {
@@ -631,7 +618,7 @@ async function main() {
     const stamp = fs.statSync(tasksPath).mtimeMs;
 
     stub.__warningAnswer = undefined;
-    await handlers['cDebug.generateTasks']();
+    await handlers['cDebug.generateAll']();
 
     const after = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
     assert.strictEqual(after.tasks.length, 1);
@@ -646,7 +633,7 @@ async function main() {
       'utf8'
     );
     stub.__warningAnswer = '覆盖';
-    await handlers['cDebug.generateTasks']();
+    await handlers['cDebug.generateAll']();
 
     const after = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
     assert.strictEqual(after.tasks.length, 1, '覆盖后只应剩扩展生成的任务');
@@ -660,7 +647,7 @@ async function main() {
       'utf8'
     );
     stub.__warningAnswer = '更新（推荐）';
-    await handlers['cDebug.generateTasks']();
+    await handlers['cDebug.generateAll']();
 
     const after = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
     assert.strictEqual(after.tasks.length, 2, '应保留用户任务并追加自己的');
@@ -670,8 +657,8 @@ async function main() {
 
   await test('重复生成不产生重复条目', async () => {
     stub.__warningAnswer = '更新（推荐）';
-    await handlers['cDebug.generateTasks']();
-    await handlers['cDebug.generateTasks']();
+    await handlers['cDebug.generateAll']();
+    await handlers['cDebug.generateAll']();
     const after = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
     assert.strictEqual(after.tasks.filter((t) => t.label === configFiles.TASK_LABEL_CURRENT).length, 1);
   });
@@ -740,10 +727,21 @@ async function main() {
     stub.__exitCode = 0;
   });
 
-  await test('breakAtMain 命令单独下断点', async () => {
+  await test('debugRun：不加断点、用「直接到底」的配置名启动', async () => {
     stub.debug.breakpoints = [];
-    await handlers['cDebug.breakAtMain']();
-    assert.strictEqual(stub.debug.breakpoints.length, 1);
+    stub.__startedConfigs = [];
+    await handlers['cDebug.debugRun']();
+
+    assert.strictEqual(stub.debug.breakpoints.length, 0, '直接到底不应添加断点');
+    assert.strictEqual(stub.__startedConfigs.length, 1, '应启动 1 次调试');
+    assert.strictEqual(stub.__startedConfigs[0].name, 'C: 调试（直接到底）');
+  });
+
+  await test('debug：断点调试用「自动断点」配置名', async () => {
+    stub.debug.breakpoints = [];
+    stub.__startedConfigs = [];
+    await handlers['cDebug.debug']();
+    assert.strictEqual(stub.__startedConfigs[0].name, 'C: 自动断点调试');
   });
 
   await test('关闭 syncConfigOnDebug 后不再覆盖手改的配置', async () => {
@@ -862,19 +860,35 @@ async function main() {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
     const menus = pkg.contributes.menus;
 
-    for (const id of ['editor/title', 'editor/title/run', 'editor/context']) {
-      for (const item of menus[id]) {
-        assert.ok(/editorLangId == c\b/.test(item.when) && /editorLangId == cpp/.test(item.when), `${id} 的 when 应同时含 c 与 cpp：${item.when}`);
-      }
+    for (const id of ['editor/context', 'explorer/context']) {
+      const items = menus[id];
+      assert.strictEqual(items.length, 4, `${id} 应只保留 4 项`);
+    }
+    for (const item of menus['editor/context']) {
+      assert.ok(/editorLangId == c\b/.test(item.when) && /editorLangId == cpp/.test(item.when), `editor/context 的 when 应同时含 c 与 cpp：${item.when}`);
     }
     for (const item of menus['explorer/context']) {
       assert.ok(/resourceExtname == \.cpp/.test(item.when), `资源管理器右键应支持 .cpp：${item.when}`);
     }
+    // 标题栏只保留一个齿轮（下拉里含四项），不再有单独的运行/调试图标
+    assert.strictEqual(menus['editor/title'].length, 1, '标题栏只应有一个入口');
+    assert.strictEqual(menus['editor/title'][0].submenu, 'cDebug.configSubmenu');
+    assert.strictEqual(menus['editor/title/run'], undefined, '不应再向运行下拉里塞按钮');
+
+    // 齿轮下拉正好是那四项
+    assert.deepStrictEqual(
+      menus['cDebug.configSubmenu'].map((i) => i.command),
+      ['cDebug.run', 'cDebug.debugRun', 'cDebug.debug', 'cDebug.generateAll']
+    );
     // 命令面板必须在任何编辑器下都能搜到，不能带 when
+    assert.deepStrictEqual(
+      menus.commandPalette.map((i) => i.command),
+      ['cDebug.run', 'cDebug.debugRun', 'cDebug.debug', 'cDebug.generateAll']
+    );
     for (const item of menus.commandPalette) {
       assert.strictEqual(item.when, undefined, `命令面板项不应限制 when：${item.command}`);
     }
-    // 命令分类统一，方便在面板里搜 C/C++ 或 C:
+    // 命令分类统一，方便在面板里搜 C/C++
     for (const cmd of pkg.contributes.commands) {
       assert.strictEqual(cmd.category, 'C/C++', `${cmd.command} 的分类应为 C/C++`);
     }

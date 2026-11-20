@@ -4,13 +4,20 @@
 
 ## 功能
 
+菜单里只有四项，覆盖日常全部场景：
+
+| 选项 | 做什么 |
+| --- | --- |
+| **运行（跑到结束）** | 编译后在集成终端执行，不进调试器，`scanf` / `cin` 输入正常 |
+| **调试（直接到底）** | 启动调试器但不加断点，程序一直跑到结束（想看调试器报告、或程序异常退出时用） |
+| **断点调试** | 启动时自动解析 `main`，在函数体内第一条可执行语句下断点，程序停在那里 |
+| **生成配置文件** | 一次写好 `tasks.json` 与 `launch.json`，编译器 / 调试器路径自动探测 |
+
+其它特性：
+
 - **C 与 C++ 都支持**：`.c` 用 gcc 编译，`.cpp` / `.cc` / `.cxx` 自动换成 g++；两者生成的配置互不覆盖
-- **一键生成配置**：`tasks.json` 与 `launch.json` 自动写好，编译器 / 调试器路径自动探测（gcc、g++、clang、MinGW-w64、MSYS2）
-- **自动断点调试**：启动时自动解析当前文件的 `main`，在函数体内第一条可执行语句下断点，程序直接停在那里
-- **直接跑到结束**：不想调试时，在终端里编译并执行，输出、`scanf` / `cin` 输入都正常
 - **两种编译范围**：只编译当前文件（单文件练习），或编译目录下全部同类源码并链接（多文件项目）
-- **可分别生成**：`tasks.json` 与 `launch.json` 可以单独生成，也可以一次生成两份
-- **不破坏已有配置**：文件已存在时先弹窗询问，选「更新」只改自己那一条，你手写的任务和调试配置原样保留
+- **不破坏已有配置**：配置文件已存在时先弹窗询问，选「更新」只改自己那一条，你手写的任务和调试配置原样保留
 
 ## 环境要求
 
@@ -32,7 +39,7 @@
 在仓库的 Release 页面下载 `c-oneclick-debug-x.y.z.vsix`，然后：
 
 ```bash
-code --install-extension c-oneclick-debug-0.4.0.vsix
+code --install-extension c-oneclick-debug-0.5.0.vsix
 ```
 
 也可以打开 VS Code，在扩展面板右上角点 `...` → `从 VSIX 安装`，选中下载的文件。
@@ -45,7 +52,7 @@ code --install-extension c-oneclick-debug-0.4.0.vsix
 git clone https://github.com/WoodenDrifter/c-oneclick-debug.git
 cd c-oneclick-debug
 npx --yes @vscode/vsce package --no-dependencies
-code --install-extension c-oneclick-debug-0.4.0.vsix
+code --install-extension c-oneclick-debug-0.5.0.vsix
 ```
 
 ### 方式三：直接放源码目录（免打包）
@@ -54,12 +61,12 @@ code --install-extension c-oneclick-debug-0.4.0.vsix
 
 ```bash
 # Windows
-xcopy /E /I c-oneclick-debug "%USERPROFILE%\.vscode\extensions\woodendrifter.c-oneclick-debug-0.4.0"
+xcopy /E /I c-oneclick-debug "%USERPROFILE%\.vscode\extensions\woodendrifter.c-oneclick-debug-0.5.0"
 ```
 
 ```bash
 # macOS / Linux
-cp -r c-oneclick-debug ~/.vscode/extensions/woodendrifter.c-oneclick-debug-0.4.0
+cp -r c-oneclick-debug ~/.vscode/extensions/woodendrifter.c-oneclick-debug-0.5.0
 ```
 
 重启 VS Code 即可。这种方式不会出现在扩展列表里，但功能完全可用；改完代码 Reload Window 就生效。
@@ -74,22 +81,22 @@ code --uninstall-extension woodendrifter.c-oneclick-debug
 
 ## 使用
 
-打开任意 `.c` / `.cpp` 文件后，有四个入口，做的事完全一样：
+打开任意 `.c` / `.cpp` 文件后，有四个入口，菜单里都是同样的四项：
 
 | 入口 | 位置 |
 | --- | --- |
-| **命令面板**（最稳） | `Ctrl+Shift+P`，输入 `C/C++` 或 `C:`，所有命令都在，任何编辑器和任何文件类型下都能搜到 |
-| **状态栏按钮** | 右下角 `⚙ C/C++ 配置`，只在 C / C++ 文件激活时出现，点开是完整菜单 |
-| **编辑器标题栏** | ▶ 运行 · ▷ 调试 · ⚙ 配置（齿轮是下拉菜单，窗口窄时可能收进 `...`） |
+| **编辑器标题栏** | 一个齿轮 ⚙，点开就是那四项菜单（窗口窄时会收进右侧 `...`） |
+| **状态栏按钮** | 右下角 `⚙ C/C++ 配置`，只在 C / C++ 文件激活时出现，点开是同一个菜单 |
+| **命令面板** | `Ctrl+Shift+P` 输入 `C/C++`，四条命令都在，任何文件类型下都能搜到 |
 | **右键菜单** | 编辑器内右键，或资源管理器里右键源文件 |
-
-命令面板里搜 `C/C++` 会列出全部 8 个命令；如果图标按钮被别的扩展挤掉，从这里一样能用。
 
 ### 常用流程
 
-**写作业 / 刷题**：打开 `main.c` 或 `main.cpp` → 状态栏 `⚙ C/C++ 配置` → `一键生成 tasks.json + launch.json` → 以后直接点 ▶ 运行。
+**写作业 / 刷题**：打开 `main.c` 或 `main.cpp` → `⚙` → `生成配置文件` → 以后直接 `运行（跑到结束）`。
 
-**想看变量**：点 ▷ 调试，程序停在 `main` 里，左边变量面板就有值了。想让它别每次都停，把 `cDebug.autoBreakpoint` 关掉，改用 F9 自己下断点。
+**想看变量**：`断点调试`，程序停在 `main` 里，左边变量面板就有值了。不想每次都停就把 `cDebug.autoBreakpoint` 关掉，改用 F9 自己下断点。
+
+**只想让程序跑一遍**：`调试（直接到底）`，启动调试器但不加断点，程序一直跑到结束，退出状态和调用栈在调试控制台里看。
 
 **C 和 C++ 混在一个目录里**：不用手动切换编译器。当前打开的是 `.c` 就用 gcc，`.cpp` 就用 g++，各自生成 `C:` / `C++:` 前缀的任务和启动配置，互不影响。
 
@@ -129,7 +136,7 @@ code --uninstall-extension woodendrifter.c-oneclick-debug
 ## 常见问题
 
 **看不到任何按钮 / 图标被挤进 `...`**
-窗口窄的时候编辑器标题栏放不下，图标会收进标题栏右侧的 `...` 里。最稳的入口是命令面板：`Ctrl+Shift+P` 输入 `C/C++`，八个命令全在。右下角的 `⚙ C/C++ 配置` 也只在 C / C++ 文件获得焦点时出现，点到终端或输出面板就会隐藏。
+窗口窄的时候编辑器标题栏放不下，齿轮会收进标题栏右侧的 `...` 里。兜底入口有两个：`Ctrl+Shift+P` 输入 `C/C++`，四条命令全在；右下角 `⚙ C/C++ 配置` 也只在 C / C++ 文件获得焦点时出现，点到终端或输出面板就会隐藏。
 
 **装了没反应**
 装完必须重载窗口：`Ctrl+Shift+P` → `Developer: Reload Window`。
@@ -141,13 +148,13 @@ MinGW-w64 的部分精简发行版不带 gdb。在终端执行 `gdb --version` �
 `gcc` 和 `g++` 是分开装的。终端执行 `g++ --version` 确认，或在 `cDebug.compilerPath` 里直接填 g++ 的绝对路径。
 
 **`scanf` / `cin` 收不到输入**
-调试模式下把 `cDebug.externalConsole` 打开；直接用 ▶ 运行则没有这个问题。
+调试模式下把 `cDebug.externalConsole` 打开；直接用「运行」则没有这个问题。
 
 **编译报 `undefined reference`**
 多文件项目里出现了多个 `main`，或者 `cDebug.buildMode` 还是 `currentFile`。改设置或只保留一个入口文件。
 
 **改了配置不生效**
-本扩展生成的配置名带语言前缀：`C: 自动断点调试` / `C++: 自动断点调试`，任务名是 `C: 编译当前文件` / `C++: 编译当前文件`，在 `.vscode/*.json` 里按名字找。
+本扩展生成的配置名带语言前缀：`C: 自动断点调试`（断点调试）/ `C: 调试（直接到底）`，C++ 对应 `C++:` 前缀；任务名是 `C: 编译当前文件` / `C++: 编译当前文件`，在 `.vscode/*.json` 里按名字找。
 
 ## 开发
 

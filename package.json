@@ -2,7 +2,7 @@
   "name": "c-oneclick-debug",
   "displayName": "C/C++ 一键调试",
   "description": "为 C / C++ 文件一键生成 tasks.json / launch.json，支持自动断点调试与直接运行，开箱即用。",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "woodendrifter",
   "license": "MIT",
   "repository": {
@@ -41,12 +41,9 @@
     "onLanguage:c",
     "onLanguage:cpp",
     "onCommand:cDebug.run",
+    "onCommand:cDebug.debugRun",
     "onCommand:cDebug.debug",
     "onCommand:cDebug.generateAll",
-    "onCommand:cDebug.generateTasks",
-    "onCommand:cDebug.generateLaunch",
-    "onCommand:cDebug.buildOnly",
-    "onCommand:cDebug.breakAtMain",
     "onCommand:cDebug.panel"
   ],
   "contributes": {
@@ -60,49 +57,31 @@
     "commands": [
       {
         "command": "cDebug.run",
-        "title": "编译并运行（跑到结束）",
+        "title": "运行（跑到结束）",
         "category": "C/C++",
         "icon": "$(play)"
       },
       {
+        "command": "cDebug.debugRun",
+        "title": "调试（直接到底）",
+        "category": "C/C++",
+        "icon": "$(debug)"
+      },
+      {
         "command": "cDebug.debug",
-        "title": "编译并自动断点调试",
+        "title": "断点调试",
         "category": "C/C++",
         "icon": "$(debug-alt)"
       },
       {
         "command": "cDebug.generateAll",
-        "title": "一键生成 tasks.json + launch.json",
+        "title": "生成配置文件",
         "category": "C/C++",
         "icon": "$(gear)"
       },
       {
-        "command": "cDebug.generateTasks",
-        "title": "只生成 tasks.json",
-        "category": "C/C++",
-        "icon": "$(checklist)"
-      },
-      {
-        "command": "cDebug.generateLaunch",
-        "title": "只生成 launch.json",
-        "category": "C/C++",
-        "icon": "$(bug)"
-      },
-      {
-        "command": "cDebug.buildOnly",
-        "title": "只编译，不运行",
-        "category": "C/C++",
-        "icon": "$(tools)"
-      },
-      {
-        "command": "cDebug.breakAtMain",
-        "title": "在 main 函数处设置断点",
-        "category": "C/C++",
-        "icon": "$(circle-filled)"
-      },
-      {
         "command": "cDebug.panel",
-        "title": "打开 C/C++ 调试面板（运行 / 调试 / 配置）",
+        "title": "打开 C/C++ 菜单",
         "category": "C/C++",
         "icon": "$(gear)"
       }
@@ -110,41 +89,27 @@
     "menus": {
       "editor/title": [
         {
-          "command": "cDebug.run",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "navigation@1"
-        },
-        {
-          "command": "cDebug.debug",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "navigation@2"
-        },
-        {
           "submenu": "cDebug.configSubmenu",
           "when": "editorLangId == c || editorLangId == cpp",
-          "group": "navigation@3"
+          "group": "navigation@1"
         }
       ],
       "cDebug.configSubmenu": [
         {
+          "command": "cDebug.run",
+          "group": "c@1"
+        },
+        {
+          "command": "cDebug.debugRun",
+          "group": "c@2"
+        },
+        {
+          "command": "cDebug.debug",
+          "group": "c@3"
+        },
+        {
           "command": "cDebug.generateAll",
-          "group": "1_generate@1"
-        },
-        {
-          "command": "cDebug.generateTasks",
-          "group": "1_generate@2"
-        },
-        {
-          "command": "cDebug.generateLaunch",
-          "group": "1_generate@3"
-        },
-        {
-          "command": "cDebug.buildOnly",
-          "group": "2_build@1"
-        },
-        {
-          "command": "cDebug.breakAtMain",
-          "group": "2_build@2"
+          "group": "c@4"
         }
       ],
       "editor/context": [
@@ -154,61 +119,19 @@
           "group": "cDebug@1"
         },
         {
-          "command": "cDebug.debug",
+          "command": "cDebug.debugRun",
           "when": "editorLangId == c || editorLangId == cpp",
           "group": "cDebug@2"
         },
         {
-          "command": "cDebug.generateAll",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@10"
-        },
-        {
-          "command": "cDebug.generateTasks",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@11"
-        },
-        {
-          "command": "cDebug.generateLaunch",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@12"
-        }
-      ],
-      "editor/title/run": [
-        {
-          "command": "cDebug.run",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@1"
-        },
-        {
           "command": "cDebug.debug",
           "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@2"
+          "group": "cDebug@3"
         },
         {
           "command": "cDebug.generateAll",
           "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@10"
-        },
-        {
-          "command": "cDebug.generateTasks",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@11"
-        },
-        {
-          "command": "cDebug.generateLaunch",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@12"
-        },
-        {
-          "command": "cDebug.buildOnly",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@20"
-        },
-        {
-          "command": "cDebug.breakAtMain",
-          "when": "editorLangId == c || editorLangId == cpp",
-          "group": "cDebug@21"
+          "group": "cDebug@4"
         }
       ],
       "explorer/context": [
@@ -218,24 +141,19 @@
           "group": "cDebug@1"
         },
         {
-          "command": "cDebug.debug",
+          "command": "cDebug.debugRun",
           "when": "resourceExtname == .c || resourceExtname == .cpp || resourceExtname == .cc || resourceExtname == .cxx",
           "group": "cDebug@2"
         },
         {
+          "command": "cDebug.debug",
+          "when": "resourceExtname == .c || resourceExtname == .cpp || resourceExtname == .cc || resourceExtname == .cxx",
+          "group": "cDebug@3"
+        },
+        {
           "command": "cDebug.generateAll",
           "when": "resourceExtname == .c || resourceExtname == .cpp || resourceExtname == .cc || resourceExtname == .cxx",
-          "group": "cDebug@10"
-        },
-        {
-          "command": "cDebug.generateTasks",
-          "when": "resourceExtname == .c || resourceExtname == .cpp || resourceExtname == .cc || resourceExtname == .cxx",
-          "group": "cDebug@11"
-        },
-        {
-          "command": "cDebug.generateLaunch",
-          "when": "resourceExtname == .c || resourceExtname == .cpp || resourceExtname == .cc || resourceExtname == .cxx",
-          "group": "cDebug@12"
+          "group": "cDebug@4"
         }
       ],
       "commandPalette": [
@@ -243,25 +161,13 @@
           "command": "cDebug.run"
         },
         {
+          "command": "cDebug.debugRun"
+        },
+        {
           "command": "cDebug.debug"
         },
         {
           "command": "cDebug.generateAll"
-        },
-        {
-          "command": "cDebug.generateTasks"
-        },
-        {
-          "command": "cDebug.generateLaunch"
-        },
-        {
-          "command": "cDebug.buildOnly"
-        },
-        {
-          "command": "cDebug.breakAtMain"
-        },
-        {
-          "command": "cDebug.panel"
         }
       ]
     },

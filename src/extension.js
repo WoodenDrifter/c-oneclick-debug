@@ -11,7 +11,6 @@ const { findEntryPoint, findFilesWithMain, isCSourceDocument, isCppDocument } = 
 const {
   CConfigProvider,
   setBreakpointAt,
-  breakAtMain,
   registerAutoBreakpointTracker,
   runBuildTask,
   startDebugSession
@@ -180,11 +179,10 @@ async function askOverwrite(existingNames) {
 }
 
 /**
- * 命令：生成配置。which 为 'tasks' | 'launch' | 'all'
- * @param {'tasks'|'launch'|'all'} which
+ * 命令：生成配置文件（tasks.json 与 launch.json 一次生成两份）
  * @param {any} [arg]
  */
-async function commandGenerate(which, arg) {
+async function commandGenerate(arg) {
   const prepared = await preparePlan(arg);
   if (!prepared) return undefined;
   const { plan } = prepared;
@@ -208,13 +206,13 @@ async function commandGenerate(which, arg) {
         await vscode.workspace
           .getConfiguration('cDebug')
           .update('buildMode', 'currentFile', vscode.ConfigurationTarget.Workspace);
-        return commandGenerate(which, arg);
+        return commandGenerate(arg);
       }
       if (!choice) return undefined;
     }
   }
 
-  const targets = which === 'all' ? ['tasks', 'launch'] : [which];
+  const targets = ['tasks', 'launch'];
   const vscodeDir = path.join(plan.workspaceFolder.uri.fsPath, '.vscode');
 
   const existing = targets.filter((t) => fs.existsSync(path.join(vscodeDir, `${t}.json`)));
@@ -232,18 +230,17 @@ async function commandGenerate(which, arg) {
   const version = getCompilerVersion(plan.toolchain.compiler) || '未知';
   log(`工具链: ${version}`);
 
-  const written = targets.map((t) => `${t}.json`).join(' 与 ');
   const detail = [
     `编译器：${plan.toolchain.compiler}`,
     plan.toolchain.debuggerPath
       ? `调试器：${plan.toolchain.debuggerPath}`
       : '调试器：未找到 gdb（调试不可用，运行不受影响）',
     `产物：${plan.programAbs}`,
-    `模式：${plan.mode === 'folder' ? '编译工作区全部 .c' : '只编译当前文件'}`
+    `模式：${plan.mode === 'folder' ? '编译工作区全部同类源码' : '只编译当前文件'}`
   ].join('\n');
 
   vscode.window
-    .showInformationMessage(`已生成 ${written}\n${detail}`, '运行', '调试')
+    .showInformationMessage(`已生成 tasks.json 与 launch.json\n${detail}`, '运行', '调试')
     .then((choice) => {
       if (choice === '运行') vscode.commands.executeCommand('cDebug.run');
       else if (choice === '调试') vscode.commands.executeCommand('cDebug.debug');
@@ -305,10 +302,13 @@ async function commandRun(arg) {
 }
 
 /**
- * 命令：编译并自动断点调试
+ * 命令：编译并启动调试。
  * @param {any} [arg]
+ * @param {{ breakAtMain?: boolean }} [options] breakAtMain 为 false 时不加断点，直接跑到结束
  */
-async function commandDebug(arg) {
+async function commandDebug(arg, options = {}) {
+  const breakAtMain = options.breakAtMain !== false;
+
   const doc = await requireCDocument(arg);
   if (!doc) return;
 
@@ -335,7 +335,7 @@ async function commandDebug(arg) {
 
   const plan = await createPlan(doc, toolchain);
   if (!plan) {
-    vscode.window.showErrorMessage('没有找到可编译的 .c 源文件。');
+    vscode.window.showErrorMessage('没有找到可编译的源文件。');
     return;
   }
 
@@ -350,7 +350,7 @@ async function commandDebug(arg) {
     }
   }
 
-  if (cfg.get('autoBreakpoint', true)) {
+  if (breakAtMain && cfg.get('autoBreakpoint', true)) {
     const entry = await findEntryPoint(doc, plan.mode, plan.isCpp);
     if (entry) {
       setBreakpointAt(entry.uri, entry.position);
@@ -378,7 +378,7 @@ async function commandDebug(arg) {
     }
   }
 
-  const started = await startDebugSession(plan);
+  const started = await startDebugSession(plan, { runThrough: !breakAtMain });
   if (!started) {
     vscode.window.showErrorMessage('无法启动调试会话，请检查 launch.json 与 gdb 配置。', '查看输出').then((c) => {
       if (c === '查看输出') reveal();
@@ -387,95 +387,41 @@ async function commandDebug(arg) {
 }
 
 /**
- * 命令：只编译，不运行
+ * 命令：调试（直接到底）——启动调试器但不加断点，程序一直跑到结束。
  * @param {any} [arg]
  */
-async function commandBuildOnly(arg) {
-  const prepared = await preparePlan(arg);
-  if (!prepared) return;
-  const { doc, plan } = prepared;
-
-  if (doc.isDirty) await doc.save();
-
-  if (shouldSyncConfigs(plan.workspaceFolder)) {
-    writeConfigFiles(plan);
-    if (plan.workspaceFolder) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-  }
-
-  const build = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: '正在编译', cancellable: false },
-    () => runBuildTask(plan)
-  );
-
-  if (build.ok) {
-    vscode.window.showInformationMessage(`编译成功：${plan.programAbs}`);
-  } else {
-    vscode.window.showErrorMessage('编译失败。', '查看输出').then((c) => {
-      if (c === '查看输出') reveal();
-    });
-  }
+async function commandDebugRun(arg) {
+  return commandDebug(arg, { breakAtMain: false });
 }
 
 /**
- * 命令：在 main 处下断点
- * @param {any} [arg]
- */
-async function commandBreakAtMain(arg) {
-  const doc = await requireCDocument(arg);
-  if (!doc) return;
-  const ok = await breakAtMain(doc);
-  if (!ok) {
-    vscode.window.showWarningMessage('当前文件中没有找到 main 函数。');
-    return;
-  }
-  vscode.window.setStatusBarMessage('已在 main 函数处设置断点', 3000);
-}
-
-/**
- * 快捷面板条目。状态栏按钮和命令面板都走这里，避免两处维护。
+ * 快捷面板条目（只有这四项）。
  */
 const PANEL_ITEMS = [
   {
-    label: '$(gear) 一键生成 tasks.json + launch.json',
-    description: '建立调试环境（已存在会先询问覆盖策略）',
-    command: 'cDebug.generateAll'
-  },
-  {
-    label: '$(checklist) 只生成 tasks.json',
-    description: '仅写入编译任务',
-    command: 'cDebug.generateTasks'
-  },
-  {
-    label: '$(bug) 只生成 launch.json',
-    description: '仅写入调试配置',
-    command: 'cDebug.generateLaunch'
-  },
-  {
-    label: '$(play) 编译并运行（跑到结束）',
-    description: '不进调试器，终端直接执行',
+    label: '$(play) 运行（跑到结束）',
+    description: '编译后在终端直接执行，不进调试器',
     command: 'cDebug.run'
   },
   {
-    label: '$(debug-alt) 编译并自动断点调试',
-    description: '启动后停在 main 第一条语句',
+    label: '$(debug-alt) 调试（直接到底）',
+    description: '启动调试器但不加断点，程序一直跑到结束',
+    command: 'cDebug.debugRun'
+  },
+  {
+    label: '$(circle-filled) 断点调试',
+    description: '编译后停在 main 第一条语句',
     command: 'cDebug.debug'
   },
   {
-    label: '$(tools) 只编译，不运行',
-    description: '检查语法与链接错误',
-    command: 'cDebug.buildOnly'
-  },
-  {
-    label: '$(circle-filled) 在 main 处设置断点',
-    description: '只下断点，不启动',
-    command: 'cDebug.breakAtMain'
+    label: '$(gear) 生成配置文件',
+    description: '一次写入 tasks.json 与 launch.json（已存在会先询问）',
+    command: 'cDebug.generateAll'
   }
 ];
 
 /**
- * 状态栏常驻按钮：只有当前编辑器是 .c 文件时才出现。
+ * 状态栏按钮：只有当前编辑器是 C / C++ 文件时才出现。
  * @param {vscode.ExtensionContext} context
  */
 function registerStatusBar(context) {
@@ -501,7 +447,7 @@ function registerStatusBar(context) {
  */
 async function commandPanel(arg) {
   const picked = await vscode.window.showQuickPick(PANEL_ITEMS, {
-    title: 'C 一键调试',
+    title: 'C/C++ 一键调试',
     placeHolder: '选择要执行的操作'
   });
   if (picked && picked.command) {
@@ -514,7 +460,7 @@ async function commandPanel(arg) {
  */
 function activate(context) {
   context.subscriptions.push(getOutput());
-  log('C 一键调试 已激活');
+  log('C/C++ 一键调试 已激活');
 
   registerAutoBreakpointTracker(context);
 
@@ -530,12 +476,9 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('cDebug.run', commandRun),
-    vscode.commands.registerCommand('cDebug.debug', commandDebug),
-    vscode.commands.registerCommand('cDebug.generateAll', (arg) => commandGenerate('all', arg)),
-    vscode.commands.registerCommand('cDebug.generateTasks', (arg) => commandGenerate('tasks', arg)),
-    vscode.commands.registerCommand('cDebug.generateLaunch', (arg) => commandGenerate('launch', arg)),
-    vscode.commands.registerCommand('cDebug.buildOnly', commandBuildOnly),
-    vscode.commands.registerCommand('cDebug.breakAtMain', commandBreakAtMain),
+    vscode.commands.registerCommand('cDebug.debugRun', commandDebugRun),
+    vscode.commands.registerCommand('cDebug.debug', (arg) => commandDebug(arg, { breakAtMain: true })),
+    vscode.commands.registerCommand('cDebug.generateAll', commandGenerate),
     vscode.commands.registerCommand('cDebug.panel', commandPanel)
   );
 

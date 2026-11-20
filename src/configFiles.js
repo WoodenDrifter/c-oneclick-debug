@@ -10,9 +10,11 @@ const { listWorkspaceSources, isCppDocument } = require('./csource');
 const TASK_LABEL_CURRENT = 'C: 编译当前文件';
 const TASK_LABEL_FOLDER = 'C: 编译工作区全部源文件';
 const CONFIG_NAME = 'C: 自动断点调试';
+const CONFIG_NAME_RUN = 'C: 调试（直接到底）';
 const CPP_TASK_LABEL_CURRENT = 'C++: 编译当前文件';
 const CPP_TASK_LABEL_FOLDER = 'C++: 编译工作区全部源文件';
 const CPP_CONFIG_NAME = 'C++: 自动断点调试';
+const CPP_CONFIG_NAME_RUN = 'C++: 调试（直接到底）';
 
 /**
  * 按语言取任务标签 / 启动配置名，C 与 C++ 各自独立，互不覆盖。
@@ -29,6 +31,14 @@ function taskLabel(isCpp, mode) {
  */
 function configName(isCpp) {
   return isCpp ? CPP_CONFIG_NAME : CONFIG_NAME;
+}
+
+/**
+ * 「调试（直接到底）」用的配置名：不加断点，启动后一直跑到结束。
+ * @param {boolean} isCpp
+ */
+function configNameRun(isCpp) {
+  return isCpp ? CPP_CONFIG_NAME_RUN : CONFIG_NAME_RUN;
 }
 
 /**
@@ -355,11 +365,14 @@ module.exports = {
   TASK_LABEL_CURRENT,
   TASK_LABEL_FOLDER,
   CONFIG_NAME,
+  CONFIG_NAME_RUN,
   CPP_TASK_LABEL_CURRENT,
   CPP_TASK_LABEL_FOLDER,
   CPP_CONFIG_NAME,
+  CPP_CONFIG_NAME_RUN,
   taskLabel,
   configName,
+  configNameRun,
   parseJsonc,
   readJsonFile,
   writeJsonFile,
